@@ -36,7 +36,14 @@ export async function runScan(registry, opts) {
   const started = Date.now();
 
   onEvent({ type: 'walk:start', root });
-  const files = await walk(root, { maxFiles: opts.maxFiles });
+  let files = await walk(root, { maxFiles: opts.maxFiles });
+  // Incremental scanning: restrict to an explicit file allowlist (e.g. git-changed files).
+  if (opts.onlyFiles && opts.onlyFiles.length) {
+    const allow = new Set(opts.onlyFiles.map((p) => p.replace(/\\/g, '/').replace(/^\.\//, '')));
+    const truncated = files.truncated;
+    files = files.filter((f) => allow.has(f.path));
+    files.truncated = truncated;
+  }
   onEvent({ type: 'walk:done', count: files.length, truncated: !!files.truncated });
 
   // When the target is a single file, file paths are relative to its parent dir — the

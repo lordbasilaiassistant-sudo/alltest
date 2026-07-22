@@ -20,6 +20,7 @@ import { filterResultView } from '../src/core/runner.js';
 import { scanSandboxed } from '../src/core/sandbox.js';
 import { applyFixes } from '../src/core/fix.js';
 import { loadBaseline, writeBaseline, diffAgainstBaseline } from '../src/core/baseline.js';
+import { exec } from '../src/core/exec.js';
 import { buildRegistry } from '../src/probes/index.js';
 import { appendCorpus } from '../src/ml/dataset.js';
 import { learnFromResult } from '../src/rsi/learn.js';
@@ -84,6 +85,15 @@ async function cmdScan(args) {
   const allowExec = !!flags.exec;
   const quiet = !!flags.quiet;
 
+  // Incremental: restrict the scan to git-changed files (fast PR checks).
+  let onlyFiles;
+  if (flags.changed || flags.since) {
+    const ref = flags.since ? String(flags.since) : (flags.changed !== true ? String(flags.changed) : null);
+    onlyFiles = await gitChangedFiles(root, ref);
+    if (!onlyFiles) { console.error('alltest: --changed needs a git repository.'); process.exitCode = 2; return; }
+    if (!onlyFiles.length) { console.error('alltest: no changed files to scan.'); return; }
+  }
+
   const spin = quiet || format !== 'table' ? null : makeProgress();
   let result;
   if (flags.sandbox || flags.timeout) {
@@ -101,7 +111,7 @@ async function cmdScan(args) {
   } else {
     result = await scan({
       root, layers, probes, allowExec, version: PKG_VERSION,
-      withFixes: !!flags.fix,
+      withFixes: !!flags.fix, onlyFiles,
       onEvent: spin ? spin.onEvent : undefined,
     });
     if (spin) spin.done();
@@ -351,6 +361,8 @@ SCAN OPTIONS
   --probes <ids>        Restrict to specific probe ids
   --fix                 Attach a concrete fix (before→after) to each finding
   --baseline <file>     Report only findings NOT in the baseline (new debt only)
+  --changed [ref]       Scan only git-changed files (fast PR checks)
+  --since <ref>         Scan only files changed vs a git ref (e.g. origin/main)
   --corpus <file.jsonl> Append findings to the ML training corpus
   --learn               Learn novel finding signatures (RSI)
   --out <file>          Write report to a file instead of stdout
@@ -365,6 +377,33 @@ EXAMPLES
 Runs on free GLM for AI-assisted triage → get the z.ai Coding Plan:
   https://z.ai/subscribe?ic=BWTG6TRYYQ  (referral — funds development)
 `);
+}
+
+/**
+ * Repo-relative paths changed in git. With `ref`, diff against it (great for PRs:
+ * `--since origin/main`); otherwise the working set (staged + unstaged + untracked).
+ * @returns {Promise<string[]|null>} null if not a git repo
+ */
+async function gitChangedFiles(root, ref) {
+  const isRepo = await exec('git', ['rev-parse', '--is-inside-work-tree'], { cwd: root, timeout: 8000 });
+  if (isRepo.code !== 0) return null;
+  const paths = new Set();
+  const add = (out) => out.split(/\r?\n/).map((s) => s.trim()).filter(Boolean).forEach((p) => paths.add(p));
+  if (ref) {
+    const r = await exec('git', ['diff', '--name-only', `${ref}...HEAD`], { cwd: root, timeout: 15000 });
+    if (r.code === 0) add(r.stdout);
+    // also include working-tree changes on top of the ref diff
+    const w = await exec('git', ['diff', '--name-only', ref], { cwd: root, timeout: 15000 });
+    if (w.code === 0) add(w.stdout);
+  } else {
+    for (const args of [['diff', '--name-only'], ['diff', '--name-only', '--cached']]) {
+      const r = await exec('git', args, { cwd: root, timeout: 15000 });
+      if (r.code === 0) add(r.stdout);
+    }
+    const u = await exec('git', ['ls-files', '--others', '--exclude-standard'], { cwd: root, timeout: 15000 });
+    if (u.code === 0) add(u.stdout);
+  }
+  return [...paths];
 }
 
 async function readVersion() {

@@ -89,6 +89,12 @@ alltest scan . --baseline .alltest/baseline.json --fail-on high   # only NEW hig
 Matching is line-independent — moving accepted code never resurfaces it as "new", but a
 genuinely new issue is caught. Output also reports how many baselined issues you've since fixed.
 
+For the fastest possible PR gate, scan **only what changed**:
+```bash
+alltest scan . --since origin/main --fail-on high    # only files this PR touched
+alltest scan . --changed                             # working-set changes (staged/unstaged/untracked)
+```
+
 ### Test every project under a directory
 ```bash
 alltest sweep ~/code --corpus data/findings.jsonl --out sweep.json

@@ -49,6 +49,19 @@ test('diff splits new vs baselined and counts fixed', () => {
   assert.equal(fixedCount, 1, 'the "gone" baseline entry is no longer present → fixed');
 });
 
+test('incremental: onlyFiles restricts the scan to the given allowlist', async () => {
+  const dir = await repo({
+    'a.js': 'const k = "AKIAQZ7W2E9R4T6Y8UOP";\n',   // has a finding
+    'b.js': 'const x = eval(y);\n',                    // has a finding
+  });
+  const all = await scan({ root: dir });
+  assert.ok(all.fileCount >= 2);
+  const only = await scan({ root: dir, onlyFiles: ['b.js'] });
+  assert.equal(only.fileCount, 1, 'only b.js scanned');
+  assert.ok(only.findings.every((f) => f.file === 'b.js'), 'no findings from excluded files');
+  assert.ok(only.findings.some((f) => f.ruleId === 'eval-use'));
+});
+
 test('end-to-end: moving accepted code does not create a "new" finding; a real new issue does', async () => {
   const dir = await repo({ 'app.js': 'const x = eval(a);\n' });
   const file = path.join(dir, 'baseline.json');
