@@ -79,6 +79,16 @@ alltest scan . --fail-on high            # exit non-zero → CI gate
 alltest scan . --corpus data/findings.jsonl --learn   # feed ML corpus + RSI
 ```
 
+### Adopt on a large repo — gate on *new* issues only
+A legacy codebase has existing debt you can't fix all at once. Accept it once, then fail CI
+only on findings a change *introduces*:
+```bash
+alltest baseline .                                   # accept current findings → .alltest/baseline.json
+alltest scan . --baseline .alltest/baseline.json --fail-on high   # only NEW high+ findings fail
+```
+Matching is line-independent — moving accepted code never resurfaces it as "new", but a
+genuinely new issue is caught. Output also reports how many baselined issues you've since fixed.
+
 ### Test every project under a directory
 ```bash
 alltest sweep ~/code --corpus data/findings.jsonl --out sweep.json

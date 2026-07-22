@@ -82,7 +82,15 @@ And propose rules from what alltest has learned (review before enabling):
 node bin/alltest.js propose-rules --out .alltest/rules.json
 ```
 
-### 6. List available probes
+### 6. Adopt on a large/legacy repo (report only NEW findings)
+```bash
+node bin/alltest.js baseline <path>                          # accept existing debt once
+node bin/alltest.js scan <path> --baseline .alltest/baseline.json --fail-on high
+```
+Use this when a repo has lots of pre-existing findings and the user only cares about
+regressions a change introduces. Matching is line-independent.
+
+### 7. List available probes
 ```bash
 node bin/alltest.js probes
 ```

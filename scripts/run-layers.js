@@ -27,9 +27,10 @@ const LAYERS = [
   { n: 7, name: 'Regressions — every adversarial-review finding locked', file: 'test/regressions.test.js' },
   { n: 8, name: 'Fix engine — before→after fixes that clear findings', file: 'test/fix.test.js' },
   { n: 9, name: 'Custom rules + RSI rule synthesis', file: 'test/custom-rules.test.js' },
-  { n: 10, name: 'RSI + ML pipelines', file: 'test/rsi-ml.test.js' },
-  { n: 11, name: 'Probe coverage (entropy/complexity/python/ci/leak)', file: 'test/probes-extra.test.js' },
-  { n: 12, name: 'Ignore + reporter contracts', file: 'test/ignore-report.test.js' },
+  { n: 10, name: 'Baseline / diff mode — new findings only', file: 'test/baseline.test.js' },
+  { n: 11, name: 'RSI + ML pipelines', file: 'test/rsi-ml.test.js' },
+  { n: 12, name: 'Probe coverage (entropy/complexity/python/ci/leak)', file: 'test/probes-extra.test.js' },
+  { n: 13, name: 'Ignore + reporter contracts', file: 'test/ignore-report.test.js' },
 ];
 
 let allGreen = true;

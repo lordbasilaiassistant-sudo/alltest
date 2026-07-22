@@ -19,6 +19,7 @@ import { render } from '../src/core/report.js';
 import { filterResultView } from '../src/core/runner.js';
 import { scanSandboxed } from '../src/core/sandbox.js';
 import { applyFixes } from '../src/core/fix.js';
+import { loadBaseline, writeBaseline, diffAgainstBaseline } from '../src/core/baseline.js';
 import { buildRegistry } from '../src/probes/index.js';
 import { appendCorpus } from '../src/ml/dataset.js';
 import { learnFromResult } from '../src/rsi/learn.js';
@@ -35,6 +36,7 @@ async function main() {
 
   switch (cmd) {
     case 'scan': return cmdScan(rest);
+    case 'baseline': return cmdBaseline(rest);
     case 'sweep': return cmdSweep(rest);
     case 'report': return cmdReport(rest);
     case 'fix': return cmdFix(rest);
@@ -115,9 +117,23 @@ async function cmdScan(args) {
     console.error(`RSI: ${learned.novel} novel signatures learned (${learned.total} known)`);
   }
 
+  // Baseline: report only findings NOT in the accepted baseline (new debt introduced).
+  let baselineNote = '';
+  if (flags.baseline) {
+    const bl = await loadBaseline(String(flags.baseline));
+    if (!bl) {
+      console.error(`No baseline at ${flags.baseline}. Create one with: alltest baseline ${positional[0] || '.'} --out ${flags.baseline}`);
+    } else {
+      const { isNew, fixedCount } = diffAgainstBaseline(result.findings, bl);
+      baselineNote = `baseline: ${bl.count} accepted · ${isNew.length} new · ${fixedCount} fixed`;
+      result = { ...result, findings: isNew, summary: { ...result.summary, total: isNew.length }, baselineNote };
+    }
+  }
+
   // Display / issue-filing / CI use a severity floor (default: low — hides `info` noise).
   const minSev = flags.min || (format === 'jsonl' || format === 'json' ? 'info' : 'low');
   const view = filterResultView(result, minSev);
+  if (baselineNote && format === 'table') console.error('  ' + baselineNote);
   const output = render(view, format, { version: PKG_VERSION });
   if (flags.out) {
     await fs.writeFile(path.resolve(String(flags.out)), output);
@@ -133,6 +149,17 @@ async function cmdScan(args) {
     const bad = result.findings.filter((f) => f.severityRank >= rank);
     if (bad.length) process.exitCode = 1;
   }
+}
+
+async function cmdBaseline(args) {
+  const { flags, positional } = parseFlags(args);
+  const root = path.resolve(positional[0] || '.');
+  try { await fs.stat(root); } catch { console.error(`alltest: path not found: ${positional[0] || root}`); process.exitCode = 2; return; }
+  const out = String(flags.out || '.alltest/baseline.json');
+  const result = await scan({ root, allowExec: !!flags.exec, version: PKG_VERSION });
+  const n = await writeBaseline(out, result.findings, { root });
+  console.error(`Accepted ${n} existing findings as the baseline → ${out}`);
+  console.error(`Now \`alltest scan ${positional[0] || '.'} --baseline ${out} --fail-on high\` reports only NEW findings.`);
 }
 
 async function cmdSweep(args) {
@@ -301,6 +328,7 @@ alltest ${PKG_VERSION} — the layered code-testing engine
 USAGE
   alltest scan [path]                 Scan a codebase (default: current dir)
   alltest fix [path] [--apply]        Show/apply concrete before→after fixes
+  alltest baseline [path] [--out f]   Accept current findings; scan --baseline reports only new
   alltest sweep <dir>                 Scan every repo/subproject under <dir>
   alltest report [path] --github O/R  Scan and file AI-fixable GitHub issues (with fixes)
   alltest learn <report.json>         Feed findings into the RSI knowledge base
@@ -322,6 +350,7 @@ SCAN OPTIONS
   --layers <a,b>        Restrict layers: static,dynamic,fuzz,meta
   --probes <ids>        Restrict to specific probe ids
   --fix                 Attach a concrete fix (before→after) to each finding
+  --baseline <file>     Report only findings NOT in the baseline (new debt only)
   --corpus <file.jsonl> Append findings to the ML training corpus
   --learn               Learn novel finding signatures (RSI)
   --out <file>          Write report to a file instead of stdout
