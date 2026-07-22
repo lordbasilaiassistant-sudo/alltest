@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>alltest — the layered code-testing engine</title>
+<meta name="description" content="Run layer upon layer of probes against any codebase to find bugs, vulnerabilities, hardcoded secrets, and smart-contract flaws — then file AI-fixable reports. Self-testing, self-improving, built for AI agents." />
+<meta property="og:title" content="alltest — the layered code-testing engine" />
+<meta property="og:description" content="Layers upon layers of tests for any codebase. Finds 0-day secrets, files AI-fixable issues, and tests itself all the way down." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --void:#070A12; --base:#0B1020; --surface:#111A2E; --surface2:#17223c;
+    --line:#233150; --line-soft:#1a2743;
+    --ink:#EBF1FF; --muted:#95A2C0; --dim:#5E6E90;
+    --signal:#FFC24B; --signal-deep:#F5A623;
+    --crit:#FF4D6D; --high:#FF8A4C; --med:#FFC24B; --low:#4CC9FF; --info:#7C89A8;
+    --pass:#43E5C7;
+    --radius:14px;
+    --maxw:1120px;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:"IBM Plex Sans",system-ui,sans-serif;
+    --display:"Space Grotesk",var(--sans);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--base);color:var(--muted);
+    font-family:var(--sans);font-size:16px;line-height:1.6;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden;
+  }
+  h1,h2,h3{font-family:var(--display);color:var(--ink);line-height:1.05;margin:0;font-weight:600;letter-spacing:-.02em}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  .mono{font-family:var(--mono)}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--signal);font-weight:500}
+
+  /* background field */
+  .field{position:fixed;inset:0;z-index:-2;background:
+    radial-gradient(900px 500px at 78% -5%, rgba(255,194,75,.10), transparent 60%),
+    radial-gradient(800px 600px at 5% 10%, rgba(76,201,255,.06), transparent 55%),
+    var(--base);}
+  .grid-lines{position:fixed;inset:0;z-index:-1;opacity:.4;
+    background-image:linear-gradient(var(--line-soft) 1px,transparent 1px),linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+    background-size:64px 64px;mask-image:radial-gradient(ellipse 100% 70% at 50% 0%,#000 30%,transparent 80%)}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);
+    background:linear-gradient(var(--base),rgba(11,16,32,.75));border-bottom:1px solid var(--line-soft)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:700;color:var(--ink);font-size:18px;letter-spacing:-.02em}
+  .glyph{width:26px;height:26px;flex:0 0 auto}
+  .navlinks{display:flex;gap:28px;align-items:center;font-size:14px;font-weight:500}
+  .navlinks a{color:var(--muted);transition:color .15s}
+  .navlinks a:hover{color:var(--ink)}
+  .navlinks .ghbtn{color:var(--ink);border:1px solid var(--line);padding:7px 14px;border-radius:9px;transition:border-color .15s,background .15s}
+  .navlinks .ghbtn:hover{border-color:var(--signal);background:rgba(255,194,75,.06)}
+  @media(max-width:720px){.navlinks a:not(.ghbtn){display:none}}
+
+  /* hero */
+  .hero{position:relative;padding:72px 0 40px}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+  @media(max-width:900px){.hero-grid{grid-template-columns:1fr;gap:36px}}
+  .badge{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12.5px;color:var(--muted);
+    border:1px solid var(--line);border-radius:100px;padding:6px 13px;margin-bottom:22px}
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--pass);box-shadow:0 0 10px var(--pass)}
+  h1.title{font-size:clamp(40px,6.4vw,68px);font-weight:700;letter-spacing:-.035em}
+  h1.title .accent{color:var(--signal)}
+  .lede{font-size:clamp(17px,2.1vw,20px);color:var(--muted);margin:22px 0 12px;max-width:32ch}
+  .subtle{color:var(--dim);font-size:15px;max-width:46ch}
+
+  .cmd{display:flex;align-items:center;gap:12px;margin:28px 0 20px;background:var(--void);
+    border:1px solid var(--line);border-radius:12px;padding:14px 16px;font-family:var(--mono);font-size:14.5px;max-width:440px}
+  .cmd .prompt{color:var(--signal)}
+  .cmd code{color:var(--ink);flex:1}
+  .cmd button{background:none;border:1px solid var(--line);color:var(--muted);border-radius:7px;
+    font-family:var(--mono);font-size:12px;padding:5px 10px;cursor:pointer;transition:.15s}
+  .cmd button:hover{border-color:var(--signal);color:var(--signal)}
+
+  .cta-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .btn{display:inline-flex;align-items:center;gap:9px;font-weight:600;font-size:15px;padding:12px 20px;border-radius:11px;transition:.16s;font-family:var(--sans)}
+  .btn-primary{background:linear-gradient(180deg,var(--signal),var(--signal-deep));color:#241800;box-shadow:0 8px 30px -8px rgba(255,194,75,.5)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 40px -10px rgba(255,194,75,.6)}
+  .btn-ghost{color:var(--ink);border:1px solid var(--line)}
+  .btn-ghost:hover{border-color:var(--muted);background:rgba(255,255,255,.02)}
+
+  /* hero canvas panel */
+  .scanpanel{position:relative;border:1px solid var(--line);border-radius:18px;overflow:hidden;
+    background:#0a0f1d;
+    box-shadow:0 40px 80px -30px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.04)}
+  .scanpanel .bar{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line-soft);font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .scanpanel .bar .tl{display:flex;gap:6px;margin-right:6px}
+  .scanpanel .bar .tl i{width:10px;height:10px;border-radius:50%;background:#28324c;display:block}
+  #scan{display:block;width:100%;height:340px}
+  .scanlegend{display:flex;gap:14px;padding:10px 14px;border-top:1px solid var(--line-soft);font-family:var(--mono);font-size:11px;flex-wrap:wrap}
+  .scanlegend span{display:inline-flex;align-items:center;gap:6px;color:var(--dim)}
+  .scanlegend i{width:8px;height:8px;border-radius:2px;display:block}
+
+  /* stat strip */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line-soft);
+    border:1px solid var(--line-soft);border-radius:14px;overflow:hidden;margin-top:56px}
+  @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--base);padding:22px 20px}
+  .stat .n{font-family:var(--display);font-size:34px;font-weight:700;color:var(--ink);letter-spacing:-.03em}
+  .stat .n b{color:var(--signal);font-weight:700}
+  .stat .l{font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-top:4px}
+
+  /* sections */
+  section.blk{padding:88px 0;border-top:1px solid var(--line-soft)}
+  .sec-head{max-width:640px;margin-bottom:44px}
+  .sec-head h2{font-size:clamp(28px,4vw,40px);margin:14px 0 12px}
+  .sec-head p{font-size:17px;color:var(--muted)}
+
+  /* layer sequence */
+  .layers{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  @media(max-width:820px){.layers{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:460px){.layers{grid-template-columns:1fr}}
+  .layer{position:relative;background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);padding:22px;overflow:hidden;transition:.2s}
+  .layer:hover{border-color:var(--line);transform:translateY(-3px)}
+  .layer .idx{font-family:var(--mono);font-size:12px;color:var(--signal);letter-spacing:.1em}
+  .layer h3{font-size:19px;margin:12px 0 8px}
+  .layer p{font-size:14px;color:var(--muted);margin:0}
+  .layer .rail{position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(var(--signal),transparent)}
+
+  /* probe grid */
+  .probes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:820px){.probes{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.probes{grid-template-columns:1fr}}
+  .probe{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:17px 18px;transition:.18s}
+  .probe:hover{border-color:var(--line);background:var(--surface2)}
+  .probe .top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+  .probe .id{font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:500}
+  .tag{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:5px;font-weight:500}
+  .tag.static{color:#a9b6d6;background:rgba(124,137,168,.14)}
+  .tag.dynamic{color:var(--low);background:rgba(76,201,255,.12)}
+  .tag.fuzz{color:var(--high);background:rgba(255,138,76,.12)}
+  .tag.meta{color:var(--signal);background:rgba(255,194,75,.12)}
+  .probe p{font-size:13px;color:var(--muted);margin:0}
+
+  /* turtles */
+  .turtle-wrap{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+  @media(max-width:860px){.turtle-wrap{grid-template-columns:1fr}}
+  .turtle{padding:0;margin:0;list-style:none;counter-reset:t}
+  .turtle li{position:relative;padding:14px 16px 14px 52px;border:1px solid var(--line-soft);border-radius:11px;margin-bottom:10px;background:var(--surface);counter-increment:t;transition:.18s}
+  .turtle li:hover{border-color:var(--line)}
+  .turtle li::before{content:counter(t,decimal-leading-zero);position:absolute;left:16px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:12px;color:var(--signal)}
+  .turtle li b{color:var(--ink);font-family:var(--display);font-weight:600;font-size:15px}
+  .turtle li span{display:block;font-size:13px;color:var(--dim);margin-top:2px}
+  .nest{position:relative;aspect-ratio:1/1;display:grid;place-items:center}
+  .ring{position:absolute;border:1px solid var(--line);border-radius:18px;display:grid;place-items:start center;padding-top:10px;
+    font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.05em}
+  .ring b{color:var(--signal)}
+
+  /* loop / RSI */
+  .loop{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;position:relative}
+  @media(max-width:820px){.loop{grid-template-columns:repeat(2,1fr)}}
+  .node{background:var(--surface);border:1px solid var(--line-soft);border-radius:12px;padding:20px;text-align:left}
+  .node .k{font-family:var(--mono);font-size:11px;color:var(--signal);letter-spacing:.12em;text-transform:uppercase}
+  .node h3{font-size:17px;margin:10px 0 7px}
+  .node p{font-size:13px;color:var(--muted);margin:0}
+
+  /* terminal */
+  .term{background:var(--void);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 30px 70px -30px rgba(0,0,0,.8)}
+  .term .bar{display:flex;gap:7px;padding:12px 15px;border-bottom:1px solid var(--line-soft);align-items:center}
+  .term .bar i{width:11px;height:11px;border-radius:50%;background:#2b3552;display:block}
+  .term .bar .p{font-family:var(--mono);font-size:12px;color:var(--dim);margin-left:8px}
+  .term pre{margin:0;padding:20px 22px;font-family:var(--mono);font-size:13px;line-height:1.7;overflow-x:auto;color:#c4d0e8}
+  .term .c-crit{color:var(--crit);font-weight:500}.term .c-high{color:var(--high)}.term .c-med{color:var(--med)}
+  .term .c-low{color:var(--low)}.term .c-dim{color:var(--dim)}.term .c-sig{color:var(--signal)}.term .c-pass{color:var(--pass)}.term .c-ink{color:var(--ink)}
+
+  /* CTA */
+  .final{text-align:center;padding:96px 0}
+  .final h2{font-size:clamp(30px,5vw,52px);letter-spacing:-.03em}
+  .final p{font-size:18px;color:var(--muted);margin:16px auto 32px;max-width:40ch}
+
+  footer{border-top:1px solid var(--line-soft);padding:44px 0 60px}
+  .foot{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:flex-start}
+  .foot .cols{display:flex;gap:56px;flex-wrap:wrap}
+  .foot h4{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0 0 12px;font-weight:500}
+  .foot a{display:block;color:var(--muted);font-size:14px;margin-bottom:8px;transition:color .15s}
+  .foot a:hover{color:var(--ink)}
+  .refnote{margin-top:30px;font-size:12.5px;color:var(--dim);border-top:1px solid var(--line-soft);padding-top:22px;line-height:1.6}
+  .refnote a{color:var(--signal)}
+
+  .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s cubic-bezier(.2,.7,.2,1),transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+</style>
+</head>
+<body>
+<div class="field"></div>
+<div class="grid-lines"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <svg class="glyph" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <rect x="2" y="2" width="28" height="28" rx="7" stroke="#233150" stroke-width="1.5"/>
+        <path d="M8 16.5l4.5 4.5L24 9.5" stroke="#FFC24B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="16" cy="16" r="12.5" stroke="#FFC24B" stroke-opacity=".25" stroke-width="1.2" stroke-dasharray="3 4"/>
+      </svg>
+      alltest
+    </a>
+    <div class="navlinks">
+      <a href="#how">How it works</a>
+      <a href="#probes">Probes</a>
+      <a href="#layers">Self-testing</a>
+      <a class="ghbtn" href="https://github.com/lordbasilaiassistant-sudo/alltest" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<a id="top"></a>
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="badge"><span class="dot"></span> 15 probes · 4 layers · self-improving</div>
+      <h1 class="title">Test <span class="accent">any</span> codebase.<br/>Layer upon layer.</h1>
+      <p class="lede">alltest runs every kind of probe — static, dynamic, fuzz, meta — against any repository to surface bugs, vulnerabilities, and hardcoded secrets.</p>
+      <p class="subtle">Then it files AI-fixable reports, learns issue patterns it has never seen, and tests itself all the way down.</p>
+
+      <div class="cmd">
+        <span class="prompt">$</span>
+        <code id="install">npx @anthonysnider/alltest scan .</code>
+        <button onclick="copyCmd()" id="copybtn">copy</button>
+      </div>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/lordbasilaiassistant-sudo/alltest" target="_blank" rel="noopener">Get started</a>
+        <a class="btn btn-ghost" href="https://www.npmjs.com/package/@anthonysnider/alltest" target="_blank" rel="noopener">View on npm</a>
+      </div>
+    </div>
+
+    <div class="scanpanel reveal">
+      <div class="bar"><span class="tl"><i></i><i></i><i></i></span> alltest scan ./repository</div>
+      <canvas id="scan" width="520" height="340" aria-hidden="true"></canvas>
+      <div class="scanlegend">
+        <span><i style="background:var(--crit)"></i>critical</span>
+        <span><i style="background:var(--high)"></i>high</span>
+        <span><i style="background:var(--med)"></i>medium</span>
+        <span><i style="background:var(--low)"></i>low</span>
+        <span><i style="background:var(--pass)"></i>clean</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="stats reveal">
+      <div class="stat"><div class="n"><b>15</b></div><div class="l">probes · 4 layers</div></div>
+      <div class="stat"><div class="n"><b>100</b></div><div class="l">tests · 10 self-layers</div></div>
+      <div class="stat"><div class="n"><b>40+</b></div><div class="l">secret patterns</div></div>
+      <div class="stat"><div class="n"><b>0</b></div><div class="l">config required</div></div>
+    </div>
+  </div>
+</header>
+
+<section class="blk" id="how">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">the engine</div>
+      <h2>Four layers of probing, in order.</h2>
+      <p>Every check is a pluggable probe. They run from cheapest to deepest, so a scan is fast by default and thorough on demand.</p>
+    </div>
+    <div class="layers">
+      <div class="layer reveal"><div class="rail"></div><div class="idx">LAYER 01</div><h3>Static</h3><p>Read the source without running it — secrets, injection, unsafe patterns, contract flaws, dependency & config risk. Works even on code that won't parse.</p></div>
+      <div class="layer reveal"><div class="rail"></div><div class="idx">LAYER 02</div><h3>Dynamic</h3><p>With <span class="mono">--exec</span>: build the project and run its test suite. A red build or a missing suite is the most objective failure there is.</p></div>
+      <div class="layer reveal"><div class="rail"></div><div class="idx">LAYER 03</div><h3>Fuzz</h3><p>Property checks over the data a project ships — malformed JSON and config that would crash it at load, before your users find it.</p></div>
+      <div class="layer reveal"><div class="rail"></div><div class="idx">LAYER 04</div><h3>Meta</h3><p>alltest inspects its own registry and finding schema while it runs. The tester verifies itself on every scan.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="blk" id="probes">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">coverage</div>
+      <h2>Fifteen probes. Every kind of flaw.</h2>
+      <p>From leaked private keys to reentrant contracts to unknown-format secrets caught by entropy alone.</p>
+    </div>
+    <div class="probes">
+      <div class="probe reveal"><div class="top"><span class="id">secrets</span><span class="tag static">static</span></div><p>Private keys (incl. EVM Wallet), 40+ vendor tokens, DB & credential URLs, committed key files.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">entropy-secrets</span><span class="tag static">0-day</span></div><p>High-entropy tokens of <em>unknown</em> vendor/format — the leaks no signature list anticipated.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">dangerous-js</span><span class="tag static">static</span></div><p>eval &amp; indirect eval, command &amp; SQL injection, DOM-XSS, disabled TLS, JWT none, weak randomness.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">python-danger</span><span class="tag static">static</span></div><p>pickle/torch/yaml deserialization (RCE), shell=True, verify=False, SSTI, hardcoded secrets.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">solidity</span><span class="tag static">static</span></div><p>tx.origin auth, unchecked calls, delegatecall, selfdestruct, block-var randomness, unbounded loops.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">deps</span><span class="tag static">static</span></div><p>Unbounded versions, missing lockfile, curl|bash in scripts, install hooks, optional/peer deps.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">env-leak</span><span class="tag static">static</span></div><p>Error/stack traces in responses (Express/Koa/Fastify), process.env dumps, wildcard CORS.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">config-hygiene</span><span class="tag static">static</span></div><p>Committed .env, private-key files vs public certs, .env not gitignored, missing .gitignore.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">ci-docker</span><span class="tag static">static</span></div><p>:latest images, ADD-from-URL, root containers, unpinned Actions, pull_request_target.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">complexity</span><span class="tag static">anomaly</span></div><p>High cyclomatic complexity, long functions, deep nesting — the hot-spots where latent bugs hide.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">debt</span><span class="tag static">static</span></div><p>TODO/FIXME/HACK, not-implemented stubs, stray logs, loose types — the highest-signal ML labels.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">json-roundtrip</span><span class="tag fuzz">fuzz</span></div><p>Parses every committed JSON/config and verifies it round-trips. Malformed data crashes apps.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">build</span><span class="tag dynamic">dynamic</span></div><p>Runs the project build (npm/tsc/cargo/go). A failing build can't ship, full stop.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">tests</span><span class="tag dynamic">dynamic</span></div><p>Runs the test suite and flags projects with no tests at all — no automated safety net.</p></div>
+      <div class="probe reveal"><div class="top"><span class="id">self-integrity</span><span class="tag meta">meta</span></div><p>Asserts alltest's own probe registry and finding schema hold — on every single run.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="blk" id="layers">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">turtles all the way down</div>
+      <h2>A tester you can trust — because it tests itself.</h2>
+      <p>A green test suite is worthless if the assertions don't depend on the code being right. So alltest tests the tests, then tests <em>that</em>.</p>
+    </div>
+    <div class="turtle-wrap">
+      <ol class="turtle reveal">
+        <li><b>Unit — tests FOR the tester</b><span>Every probe verified against ground-truth fixtures with known planted flaws.</span></li>
+        <li><b>Meta — the suite tests itself</b><span>alltest scans its own source; a probe checks the registry &amp; schema.</span></li>
+        <li><b>Meta-meta — proof it can go red</b><span>A test that proves the self-test would actually fail on a real regression.</span></li>
+        <li><b>Mutation — the tests have teeth</b><span>Detection logic is deliberately broken; surviving mutants expose coverage holes.</span></li>
+        <li><b>Regressions — every review finding, locked</b><span>Each confirmed false-positive and false-negative is a permanent test.</span></li>
+      </ol>
+      <div class="nest reveal" aria-hidden="true">
+        <div class="ring" style="width:100%;height:100%"><span><b>test</b> the test that tests the test</span></div>
+        <div class="ring" style="width:78%;height:78%"><span>mutation proves teeth</span></div>
+        <div class="ring" style="width:57%;height:57%"><span>meta-meta</span></div>
+        <div class="ring" style="width:37%;height:37%"><span><b>the tester</b></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="blk">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">it gets smarter</div>
+      <h2>Every scan feeds the next one.</h2>
+      <p>Novel findings are learned into a knowledge base; recurring ones become new detection rules. Every finding is also a labeled example for a future issue-detection model.</p>
+    </div>
+    <div class="loop">
+      <div class="node reveal"><div class="k">scan</div><h3>Detect</h3><p>15 probes surface findings across any language, each with a stable signature.</p></div>
+      <div class="node reveal"><div class="k">learn</div><h3>Recognize</h3><p>Never-seen signatures are recorded; the tool knows tomorrow what was 0-day today.</p></div>
+      <div class="node reveal"><div class="k">promote</div><h3>Rule-synthesize</h3><p>Signatures seen often enough graduate to candidate detection rules.</p></div>
+      <div class="node reveal"><div class="k">corpus</div><h3>Train</h3><p>Every finding becomes a labeled JSONL row — the seed set for a detection model.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="blk">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">real output</div>
+      <h2>Findings written to be fixed.</h2>
+      <p>Exact location, redacted snippet, why it matters, a concrete remediation. Human-readable, or JSON / SARIF / JSONL for agents and CI.</p>
+    </div>
+    <div class="term reveal">
+      <div class="bar"><i></i><i></i><i></i><span class="p">alltest scan ./server --format table</span></div>
+<pre><span class="c-dim">  alltest — ./server
+  418 files · 6 languages · 15 probes · 210ms</span>
+
+  <span class="c-ink">server/db/users.js</span>
+    <span class="c-high">✗ HIGH    </span> SQL built via string concatenation<span class="c-dim">:88</span>
+        <span class="c-dim">↳ Use parameterized queries instead of building the query string.</span>
+  <span class="c-ink">.env</span>
+    <span class="c-high">✗ HIGH    </span> Environment file committed<span class="c-dim">:1</span>
+        <span class="c-dim">↳ git rm --cached, add to .gitignore, and rotate anything it held.</span>
+  <span class="c-ink">config.js</span>
+    <span class="c-high">✗ HIGH    </span> High-entropy secret · ADMIN_KEY<span class="c-dim">:5</span>
+        <span class="c-dim">↳ Matches no known pattern but looks like a token — verify &amp; rotate.</span>
+  <span class="c-ink">contracts/Vault.sol</span>
+    <span class="c-crit">⛔ CRITICAL</span> Authorization via tx.origin<span class="c-dim">:42</span>
+        <span class="c-dim">↳ tx.origin is phishable. Use msg.sender for auth checks.</span>
+
+  <span class="c-ink">Summary:</span> <span class="c-crit">1 critical</span> <span class="c-dim">·</span> <span class="c-high">3 high</span>
+  <span class="c-dim">risk score 14.2 · files an AI-fixable issue per finding</span>
+</pre>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap reveal">
+    <div class="eyebrow" style="justify-content:center;text-align:center">one command, any repo</div>
+    <h2>Point it at your code.</h2>
+    <p>No config. No account. Just findings — and a tester that tests itself.</p>
+    <div class="cmd" style="margin:0 auto 26px">
+      <span class="prompt">$</span><code>npx @anthonysnider/alltest scan .</code>
+      <button onclick="copyCmd()">copy</button>
+    </div>
+    <div class="cta-row" style="justify-content:center">
+      <a class="btn btn-primary" href="https://github.com/lordbasilaiassistant-sudo/alltest" target="_blank" rel="noopener">Star on GitHub</a>
+      <a class="btn btn-ghost" href="https://www.npmjs.com/package/@anthonysnider/alltest" target="_blank" rel="noopener">npm install</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <div class="brand" style="margin-bottom:10px">
+          <svg class="glyph" viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7" stroke="#233150" stroke-width="1.5"/><path d="M8 16.5l4.5 4.5L24 9.5" stroke="#FFC24B" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          alltest
+        </div>
+        <p style="max-width:30ch;font-size:14px;color:var(--dim);margin:0">The layered code-testing engine. Built for AI agents to test anyone's code, thoroughly.</p>
+      </div>
+      <div class="cols">
+        <div>
+          <h4>Project</h4>
+          <a href="https://github.com/lordbasilaiassistant-sudo/alltest" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://www.npmjs.com/package/@anthonysnider/alltest" target="_blank" rel="noopener">npm</a>
+          <a href="https://github.com/lordbasilaiassistant-sudo/alltest#readme" target="_blank" rel="noopener">Docs</a>
+        </div>
+        <div>
+          <h4>Use</h4>
+          <a href="#how">How it works</a>
+          <a href="#probes">Probes</a>
+          <a href="#layers">Self-testing</a>
+        </div>
+      </div>
+    </div>
+    <div class="refnote">
+      alltest is MIT-licensed and free. It can use free GLM for optional AI-assisted triage — if you want a coding plan that runs models like this, the <a href="https://z.ai/subscribe?ic=BWTG6TRYYQ" target="_blank" rel="noopener">z.ai Coding Plan</a> link is a referral that helps fund development. Disclosed referral, not a discount.
+    </div>
+  </div>
+</footer>
+
+<script>
+  function copyCmd(){
+    const t="npx @anthonysnider/alltest scan .";
+    navigator.clipboard && navigator.clipboard.writeText(t);
+    const b=document.getElementById('copybtn'); if(b){const o=b.textContent;b.textContent='copied ✓';b.style.color='var(--pass)';setTimeout(()=>{b.textContent=o;b.style.color='';},1400);}
+  }
+
+  // scroll reveal
+  const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}})},{threshold:.12});
+  document.querySelectorAll('.reveal').forEach((el,i)=>{el.style.transitionDelay=(Math.min(i,6)*45)+'ms';io.observe(el);});
+
+  // ── signature: the live scan ──────────────────────────────────────────────
+  (function(){
+    const cv=document.getElementById('scan'); if(!cv) return;
+    const ctx=cv.getContext('2d');
+    const reduce=window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    let W,H,dpr;
+    function size(){ dpr=Math.min(devicePixelRatio||1,2); W=cv.clientWidth; H=cv.clientHeight;
+      cv.width=W*dpr; cv.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); build(); }
+    const sev=[['#FF4D6D',.06],['#FF8A4C',.10],['#FFC24B',.16],['#4CC9FF',.22]]; // color, cumulative-ish weight
+    const pad=18, rowH=13, colW=7;
+    let rows=[], beamX=0, findings=[], t=0;
+    function build(){
+      rows=[]; findings=[];
+      const nRows=Math.floor((H-pad*2)/rowH);
+      for(let r=0;r<nRows;r++){
+        const segs=[]; let x=pad+ (r%3)*4;
+        const maxX=W-pad-10;
+        while(x<maxX){ const w=(4+Math.floor(rand(r*7+segs.length)*9))*colW*0.5;
+          const gap=colW*(1+Math.floor(rand(r*13+segs.length)*2));
+          segs.push([x,Math.min(w,maxX-x)]); x+=w+gap; }
+        rows.push(segs);
+        // sparse planted findings
+        if(rand(r*3.3)>.82 && segs.length){ const s=segs[Math.floor(rand(r)*segs.length)];
+          const sv=pickSev(r); findings.push({x:s[0]+s[1]*0.5,y:pad+r*rowH+rowH*0.5,c:sv,hit:0,rise:0}); }
+      }
+    }
+    function rand(n){ const s=Math.sin(n*127.1+ .7)*43758.5453; return s-Math.floor(s); }
+    function pickSev(r){ const p=rand(r*9.9); if(p>.9)return '#FF4D6D'; if(p>.72)return '#FF8A4C'; if(p>.4)return '#FFC24B'; return '#4CC9FF'; }
+
+    function frame(){
+      t+=1;
+      ctx.clearRect(0,0,W,H);
+      // faint scan region behind beam
+      const bx=beamX;
+      // code ticks
+      for(let r=0;r<rows.length;r++){
+        const y=pad+r*rowH;
+        for(const [x,w] of rows[r]){
+          const lit = x < bx ? 1 : (x<bx+40? (1-(x-bx)/40):0);
+          ctx.fillStyle='rgba(120,137,168,'+(0.10+lit*0.16)+')';
+          ctx.fillRect(x,y+3,w,3);
+        }
+      }
+      // findings light up as the beam passes
+      for(const f of findings){
+        if(bx>=f.x && f.hit<1) f.hit=Math.min(1,f.hit+0.08);
+        if(f.hit>0){
+          if(f.hit>=1) f.rise=Math.min(1,f.rise+0.012);
+          const a=f.hit*(1-f.rise*0.6);
+          const yy=f.y - f.rise*22;
+          ctx.beginPath(); ctx.arc(f.x,yy,3.2+f.hit*1.4,0,7); ctx.fillStyle=f.c; ctx.globalAlpha=a; ctx.fill();
+          ctx.globalAlpha=a*0.35; ctx.beginPath(); ctx.arc(f.x,yy,7+f.hit*4,0,7); ctx.fillStyle=f.c; ctx.fill();
+          ctx.globalAlpha=1;
+        }
+      }
+      // the beam
+      const grd=ctx.createLinearGradient(bx-30,0,bx+8,0);
+      grd.addColorStop(0,'rgba(255,194,75,0)'); grd.addColorStop(1,'rgba(255,194,75,.16)');
+      ctx.fillStyle=grd; ctx.fillRect(bx-30,0,38,H);
+      ctx.fillStyle='rgba(255,194,75,.9)'; ctx.fillRect(bx,0,1.4,H);
+      ctx.fillStyle='rgba(255,194,75,.5)'; ctx.fillRect(bx,0,1.4,H); // core
+      // move beam
+      const speed=reduce?0:1.7;
+      beamX+=speed;
+      if(beamX>W-pad+30){ beamX=pad; for(const f of findings){f.hit=0;f.rise=0;} }
+      if(!reduce) raf=requestAnimationFrame(frame); else { drawStatic(); }
+    }
+    function drawStatic(){ beamX=W; findings.forEach(f=>{f.hit=1;f.rise=0;}); ctx.clearRect(0,0,W,H);
+      for(let r=0;r<rows.length;r++){const y=pad+r*rowH;for(const[x,w]of rows[r]){ctx.fillStyle='rgba(120,137,168,.22)';ctx.fillRect(x,y+3,w,3);}}
+      for(const f of findings){ctx.beginPath();ctx.arc(f.x,f.y,3.6,0,7);ctx.fillStyle=f.c;ctx.fill();ctx.globalAlpha=.3;ctx.beginPath();ctx.arc(f.x,f.y,9,0,7);ctx.fill();ctx.globalAlpha=1;} }
+    let raf;
+    size(); window.addEventListener('resize',()=>{cancelAnimationFrame(raf);size();if(!reduce)raf=requestAnimationFrame(frame);});
+    if(reduce) drawStatic(); else raf=requestAnimationFrame(frame);
+  })();
+</script>
+</body>
+</html>
