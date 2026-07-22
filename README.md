@@ -1,5 +1,10 @@
 # alltest
 
+[![npm](https://img.shields.io/npm/v/@anthonysnider/alltest?color=%23FFC24B&label=npm)](https://www.npmjs.com/package/@anthonysnider/alltest)
+[![ci](https://github.com/lordbasilaiassistant-sudo/alltest/actions/workflows/ci.yml/badge.svg)](https://github.com/lordbasilaiassistant-sudo/alltest/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![site](https://img.shields.io/badge/live-site-FFC24B.svg)](https://lordbasilaiassistant-sudo.github.io/alltest/)
+
 **The layered code-testing engine.** Point it at *any* codebase and it runs layer upon
 layer of probes — static analysis, dynamic build/test execution, fuzzing, and meta
 self-checks — to surface bugs, security holes, hardcoded secrets, smart-contract flaws,
@@ -108,7 +113,27 @@ alltest report . --github owner/repo --min-severity high --confirm  # create the
 ```
 Deduped by signature so re-runs never spam. Requires the [`gh`](https://cli.github.com) CLI.
 
-### Programmatic API
+### Use in CI (GitHub Actions)
+
+Gate any repo on alltest in one step — findings appear in the **Security → Code scanning** tab:
+```yaml
+# .github/workflows/alltest.yml
+name: alltest
+on: [push, pull_request]
+permissions: { contents: read, security-events: write }
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: lordbasilaiassistant-sudo/alltest@v1     # runs the scan → alltest.sarif
+        with: { fail-on: high }
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: alltest.sarif }
+```
+Or just `run: npx @anthonysnider/alltest scan . --fail-on high` for a plain gate.
+
+## Programmatic API
 ```js
 import { scan, render } from 'alltest';
 

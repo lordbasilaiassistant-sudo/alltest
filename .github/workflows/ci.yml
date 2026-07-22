@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test + self-scan (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ['18', '20', '22']
+    steps:
+      - uses: actions/checkout@v4  # alltest-ignore
+      - uses: actions/setup-node@v4  # alltest-ignore
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Run the layered test suite (118 tests)
+        run: node --test test/*.test.js
+      - name: Dogfood — alltest scans itself, fail on high/critical
+        run: node bin/alltest.js scan . --fail-on high

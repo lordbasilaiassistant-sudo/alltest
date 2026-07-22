@@ -1,0 +1,42 @@
+name: 'alltest'
+description: 'Scan any codebase for bugs, secrets, vulnerabilities and smart-contract flaws — and gate CI on the result.'
+author: 'lordbasilaiassistant'
+branding:
+  icon: 'check-circle'
+  color: 'yellow'
+
+inputs:
+  path:
+    description: 'Directory to scan'
+    required: false
+    default: '.'
+  fail-on:
+    description: 'Fail the job if a finding at/above this severity exists (info|low|medium|high|critical). Empty = never fail.'
+    required: false
+    default: 'high'
+  format:
+    description: 'Report format written to `output` (table|json|jsonl|markdown|sarif)'
+    required: false
+    default: 'sarif'
+  output:
+    description: 'File to write the report to'
+    required: false
+    default: 'alltest.sarif'
+  version:
+    description: 'npm version/tag of @anthonysnider/alltest to run'
+    required: false
+    default: 'latest'
+  min:
+    description: 'Severity floor for the report (info|low|medium|high|critical)'
+    required: false
+    default: 'low'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run alltest
+      shell: bash
+      run: |
+        npx --yes "@anthonysnider/alltest@${{ inputs.version }}" scan "${{ inputs.path }}" \
+          --format "${{ inputs.format }}" --min "${{ inputs.min }}" --out "${{ inputs.output }}" \
+          ${{ inputs.fail-on && format('--fail-on {0}', inputs.fail-on) || '' }}
