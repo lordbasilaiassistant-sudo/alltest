@@ -18,6 +18,7 @@ import { scan } from '../src/index.js';
 import { render } from '../src/core/report.js';
 import { filterResultView } from '../src/core/runner.js';
 import { scanSandboxed } from '../src/core/sandbox.js';
+import { applyFixes } from '../src/core/fix.js';
 import { buildRegistry } from '../src/probes/index.js';
 import { appendCorpus } from '../src/ml/dataset.js';
 import { learnFromResult } from '../src/rsi/learn.js';
@@ -36,6 +37,7 @@ async function main() {
     case 'scan': return cmdScan(rest);
     case 'sweep': return cmdSweep(rest);
     case 'report': return cmdReport(rest);
+    case 'fix': return cmdFix(rest);
     case 'learn': return cmdLearn(rest);
     case 'probes': return cmdProbes(rest);
     case 'version': case '--version': case '-v':
@@ -96,6 +98,7 @@ async function cmdScan(args) {
   } else {
     result = await scan({
       root, layers, probes, allowExec, version: PKG_VERSION,
+      withFixes: !!flags.fix,
       onEvent: spin ? spin.onEvent : undefined,
     });
     if (spin) spin.done();
@@ -157,10 +160,60 @@ async function cmdSweep(args) {
   }
 }
 
+async function cmdFix(args) {
+  const { flags, positional } = parseFlags(args);
+  const root = path.resolve(positional[0] || '.');
+  try { await fs.stat(root); } catch { console.error(`alltest: path not found: ${positional[0] || root}`); process.exitCode = 2; return; }
+
+  const result = await scan({ root, version: PKG_VERSION, withFixes: true });
+  const withFix = result.findings.filter((f) => f.fix);
+  const auto = withFix.filter((f) => f.fix.autoApplicable && f.fix.confidence >= (flags['min-confidence'] ? Number(flags['min-confidence']) : 0.7));
+  const suggestions = withFix.filter((f) => !auto.includes(f));
+
+  const apply = !!flags.apply;
+  const C = process.stdout.isTTY && !process.env.NO_COLOR;
+  const c = (col, s) => C ? `\x1b[${col}m${s}\x1b[0m` : s;
+
+  console.log('');
+  console.log(c('1', `  alltest fix — ${root}`));
+  console.log(c('2', `  ${withFix.length} fixable of ${result.findings.length} findings · ${auto.length} auto-applicable · ${suggestions.length} need review`));
+  console.log('');
+
+  if (apply) {
+    const { applied, skipped } = await applyFixes(root, result.findings, { minConfidence: flags['min-confidence'] ? Number(flags['min-confidence']) : 0.7, dryRun: !!flags['dry-run'] });
+    for (const fx of applied) console.log('  ' + c('32', (flags['dry-run'] ? 'would fix ' : 'fixed ')) + c('2', fx.file + ':' + fx.line) + '  ' + fx.ruleId);
+    console.log('');
+    console.log(c('1', `  ${flags['dry-run'] ? 'Would apply' : 'Applied'} ${applied.length} auto-fixes.`) + c('2', ` ${suggestions.length} findings need a reviewed change (see below).`));
+  } else {
+    console.log(c('2', '  (dry run — showing fixes. Re-run `alltest fix . --apply` to write the safe ones.)'));
+  }
+  console.log('');
+
+  // show concrete diffs for everything fixable
+  const show = flags.all ? withFix : withFix.slice(0, flags.limit ? Number(flags.limit) : 40);
+  for (const f of show) {
+    const badge = f.fix.autoApplicable ? c('32', '● auto') : c('33', '○ review');
+    console.log(`  ${badge} ${c('1', f.ruleId)} ${c('2', f.location)}`);
+    console.log(c('2', `     ${f.fix.note}`));
+    if (f.fix.strategy === 'replace-line' && f.fix.original != null) {
+      console.log('     ' + c('31', '- ' + f.fix.original.trim()));
+      if (f.fix.replacement != null) console.log('     ' + c('32', '+ ' + f.fix.replacement.trim()));
+    } else if (f.fix.strategy === 'delete-line') {
+      console.log('     ' + c('31', '- ' + (f.fix.original || '').trim()) + c('2', '   (remove)'));
+    } else if (f.fix.strategy === 'create-file') {
+      console.log('     ' + c('32', '+ create ' + f.fix.extra.createPath));
+    } else if (f.fix.strategy === 'insert') {
+      console.log('     ' + c('32', '+ ' + (f.fix.replacement || '').split('\n').join(' / ')));
+    }
+    console.log('');
+  }
+  if (!flags.all && withFix.length > show.length) console.log(c('2', `  … and ${withFix.length - show.length} more (use --all)`));
+}
+
 async function cmdReport(args) {
   const { flags, positional } = parseFlags(args);
   const root = path.resolve(positional[0] || '.');
-  const result = await scan({ root, allowExec: !!flags.exec, version: PKG_VERSION });
+  const result = await scan({ root, allowExec: !!flags.exec, version: PKG_VERSION, withFixes: true });
   if (flags.github) {
     const dry = !flags.confirm; // filing issues is outward-facing → require --confirm
     const r = await fileIssues(String(flags.github), result, { dryRun: dry, minSeverity: flags['min-severity'] || 'medium' });
@@ -226,17 +279,25 @@ alltest ${PKG_VERSION} — the layered code-testing engine
 
 USAGE
   alltest scan [path]                 Scan a codebase (default: current dir)
+  alltest fix [path] [--apply]        Show/apply concrete before→after fixes
   alltest sweep <dir>                 Scan every repo/subproject under <dir>
-  alltest report [path] --github O/R  Scan and file AI-fixable GitHub issues
+  alltest report [path] --github O/R  Scan and file AI-fixable GitHub issues (with fixes)
   alltest learn <report.json>         Feed findings into the RSI knowledge base
   alltest probes                      List all probes
   alltest version
+
+FIX OPTIONS
+  --apply               Write the auto-applicable fixes to disk (default: dry run)
+  --dry-run             With --apply: show what would change without writing
+  --min-confidence <n>  Only auto-apply fixes at/above this confidence (default 0.7)
+  --all                 Show every fix, not just the first 40
 
 SCAN OPTIONS
   --exec                Run dynamic probes (build/tests) — executes project code
   --format <fmt>        table | json | jsonl | markdown | sarif   (default: table)
   --layers <a,b>        Restrict layers: static,dynamic,fuzz,meta
   --probes <ids>        Restrict to specific probe ids
+  --fix                 Attach a concrete fix (before→after) to each finding
   --corpus <file.jsonl> Append findings to the ML training corpus
   --learn               Learn novel finding signatures (RSI)
   --out <file>          Write report to a file instead of stdout

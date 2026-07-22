@@ -107,13 +107,31 @@ ${f.message || f.title}
 
 ## How to fix (for an AI agent or human)
 ${f.fixHint || 'Review and remediate the pattern above.'}
-
+${fixSection(f)}
 ## Acceptance criteria
 - [ ] The pattern at \`${f.location}\` is removed or made safe.
 - [ ] A re-run of \`npx alltest scan .\` no longer reports rule \`${f.ruleId}\` here.
 ${f.tags?.length ? `\n**Tags:** ${f.tags.map((t) => '`' + t + '`').join(', ')}` : ''}
 
 <sub>${MARKER}${f.signature}</sub>`;
+}
+
+/** Embed the concrete fix (before→after + patch) when the fix engine produced one. */
+function fixSection(f) {
+  const fix = f.fix;
+  if (!fix) return '';
+  const out = ['', '### Suggested change' + (fix.autoApplicable ? ' (auto-applicable)' : ' (review before applying)'), '', fix.note];
+  if (fix.strategy === 'replace-line' && fix.original != null) {
+    out.push('', '```diff', `- ${fix.original.trim()}`, fix.replacement != null ? `+ ${fix.replacement.trim()}` : '', '```');
+  } else if (fix.strategy === 'delete-line') {
+    out.push('', '```diff', `- ${(fix.original || '').trim()}`, '```', '_(remove this line)_');
+  } else if (fix.strategy === 'create-file') {
+    out.push('', 'Create `' + fix.extra.createPath + '`:', '```', fix.replacement, '```');
+  } else if (fix.patch && fix.strategy !== 'manual') {
+    out.push('', '```diff', fix.patch, '```');
+  }
+  out.push('', '_Run `npx @anthonysnider/alltest fix . --apply` to apply the auto-fixable subset._');
+  return out.join('\n');
 }
 
 function rankOf(sev) {

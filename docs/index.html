@@ -219,7 +219,7 @@
       <div class="badge"><span class="dot"></span> 15 probes · 4 layers · self-improving</div>
       <h1 class="title">Test <span class="accent">any</span> codebase.<br/>Layer upon layer.</h1>
       <p class="lede">alltest runs every kind of probe — static, dynamic, fuzz, meta — against any repository to surface bugs, vulnerabilities, and hardcoded secrets.</p>
-      <p class="subtle">Then it files AI-fixable reports, learns issue patterns it has never seen, and tests itself all the way down.</p>
+      <p class="subtle">Then it writes the actual fix — a patch, not a hint — learns issue patterns it has never seen, and tests itself all the way down.</p>
 
       <div class="cmd">
         <span class="prompt">$</span>
@@ -367,6 +367,35 @@
 
   <span class="c-ink">Summary:</span> <span class="c-crit">1 critical</span> <span class="c-dim">·</span> <span class="c-high">3 high</span>
   <span class="c-dim">risk score 14.2 · files an AI-fixable issue per finding</span>
+</pre>
+    </div>
+  </div>
+</section>
+
+<section class="blk">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div class="eyebrow">not just advice</div>
+      <h2>The actual fix. Ready to apply.</h2>
+      <p>Every fixable finding carries the concrete before→after change — a patch, not a hint. Mechanical fixes apply themselves; risk-bearing ones come as a reviewed suggestion.</p>
+    </div>
+    <div class="term reveal">
+      <div class="bar"><i></i><i></i><i></i><span class="p">alltest fix ./server --apply</span></div>
+<pre>  <span class="c-pass">●</span> <span class="c-ink">auto</span>   <span class="c-sig">disable-tls-verify</span> <span class="c-dim">server/http.js:44</span>
+     <span class="c-dim">Remove rejectUnauthorized:false so TLS certificates are validated again.</span>
+     <span class="c-crit">- const agent = new https.Agent({ rejectUnauthorized: false });</span>
+     <span class="c-pass">+ const agent = new https.Agent({});</span>
+
+  <span class="c-pass">●</span> <span class="c-ink">auto</span>   <span class="c-sig">py-yaml-load</span> <span class="c-dim">loader.py:12</span>
+     <span class="c-crit">- data = yaml.load(f, Loader=yaml.Loader)</span>
+     <span class="c-pass">+ data = yaml.safe_load(f)</span>
+
+  <span class="c-med">○</span> <span class="c-ink">review</span> <span class="c-sig">hardcoded-password</span> <span class="c-dim">config.js:5</span>
+     <span class="c-dim">Set DB_PASSWORD in the environment, then rotate the exposed value.</span>
+     <span class="c-crit">- const dbPassword = "sup3r…";</span>
+     <span class="c-pass">+ const dbPassword = process.env.DB_PASSWORD;</span>
+
+  <span class="c-ink">Applied 2 auto-fixes.</span> <span class="c-dim">1 finding needs a reviewed change.</span>
 </pre>
     </div>
   </div>

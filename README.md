@@ -80,6 +80,27 @@ alltest sweep ~/code --corpus data/findings.jsonl --out sweep.json
 ```
 Finds each project root and scans them all — "check all my repos" in one command.
 
+### Get the actual fix — not just advice
+```bash
+alltest fix .            # show the concrete before→after change for every fixable finding
+alltest fix . --apply    # write the safe, mechanical fixes to disk (shows what changed)
+```
+Each finding carries a real remediation, not a hint: the exact line rewrite, a unified-diff
+patch, and a plain-language note. Mechanical, behavior-safe fixes (`yaml.load`→`safe_load`,
+remove `rejectUnauthorized:false`, `tx.origin`→`msg.sender`, strip `debugger`, create
+`.gitignore`) are **auto-applicable**; risk-bearing ones (move a secret to `process.env`,
+parameterize a query) come as a reviewed suggestion. Add `--fix` to any `scan` to attach
+fixes to the JSON output for an agent to apply.
+
+```diff
+  ● auto  disable-tls-verify  server.js:44
+- const agent = new https.Agent({ rejectUnauthorized: false });
++ const agent = new https.Agent({});
+  ○ review hardcoded-password  config.js:5   (set DB_PASSWORD, then rotate the old value)
+- const dbPassword = "sup3r…";
++ const dbPassword = process.env.DB_PASSWORD;
+```
+
 ### File AI-fixable GitHub issues
 ```bash
 alltest report . --github owner/repo --min-severity high            # dry run

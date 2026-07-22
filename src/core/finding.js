@@ -66,6 +66,7 @@ export class Finding {
     this.confidence = clamp01(init.confidence ?? 0.8);
     this.tags = Array.isArray(init.tags) ? [...init.tags] : [];
     this.meta = init.meta && typeof init.meta === 'object' ? init.meta : {};
+    this.fix = init.fix || null; // concrete remediation, attached by the fix engine on demand
   }
 
   get severityRank() {
@@ -103,6 +104,7 @@ export class Finding {
       confidence: this.confidence,
       tags: this.tags,
       signature: this.signature,
+      fix: this.fix ? safeValue(this.fix) : null,
       meta: safeValue(this.meta),
     };
   }

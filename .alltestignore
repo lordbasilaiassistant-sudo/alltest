@@ -10,5 +10,6 @@ src/probes/static/solidity.js
 src/probes/static/env-leak.js
 src/probes/static/debt.js
 src/rsi/learn.js
+src/core/fix.js
 dataset/
 test/

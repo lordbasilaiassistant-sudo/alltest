@@ -59,7 +59,19 @@ node bin/alltest.js report <path> --github OWNER/REPO --min-severity high --conf
 Issues are deduped by a signature marker and written for an AI agent to fix: exact
 `file:line`, redacted snippet, why-it-matters, concrete remediation, acceptance criteria.
 
-### 4. List available probes
+### 4. Get / apply the actual fix (not just advice)
+```bash
+node bin/alltest.js fix <path>            # show concrete before→after diffs per finding
+node bin/alltest.js fix <path> --apply    # write the safe, mechanical fixes to disk
+node bin/alltest.js scan <path> --fix --format json   # attach fixes to JSON for you to apply
+```
+Every fixable finding gets a `fix` object: `{ strategy, original, replacement, patch, note,
+autoApplicable, confidence }`. **Prefer applying `fix.replacement` / `fix.patch` over writing
+your own** — it's the vetted change. Auto-applicable fixes are behavior-safe; the rest
+(secrets → `process.env`, SQL → parameterized) are suggestions you should review in context.
+Always re-run `scan` after fixing to confirm the `ruleId` no longer fires.
+
+### 5. List available probes
 ```bash
 node bin/alltest.js probes
 ```

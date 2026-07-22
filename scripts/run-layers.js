@@ -25,9 +25,10 @@ const LAYERS = [
   { n: 5, name: 'Robustness — hostile & degenerate inputs', file: 'test/robustness.test.js' },
   { n: 6, name: 'Sandbox — hard-kills a sync-hanging probe', file: 'test/sandbox.test.js' },
   { n: 7, name: 'Regressions — every adversarial-review finding locked', file: 'test/regressions.test.js' },
-  { n: 8, name: 'RSI + ML pipelines', file: 'test/rsi-ml.test.js' },
-  { n: 9, name: 'Probe coverage (entropy/complexity/python/ci/leak)', file: 'test/probes-extra.test.js' },
-  { n: 10, name: 'Ignore + reporter contracts', file: 'test/ignore-report.test.js' },
+  { n: 8, name: 'Fix engine — before→after fixes that clear findings', file: 'test/fix.test.js' },
+  { n: 9, name: 'RSI + ML pipelines', file: 'test/rsi-ml.test.js' },
+  { n: 10, name: 'Probe coverage (entropy/complexity/python/ci/leak)', file: 'test/probes-extra.test.js' },
+  { n: 11, name: 'Ignore + reporter contracts', file: 'test/ignore-report.test.js' },
 ];
 
 let allGreen = true;

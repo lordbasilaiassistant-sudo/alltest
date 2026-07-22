@@ -32,10 +32,23 @@ export async function scan(opts) {
     if (def) extra.push(def);
   }
   const registry = buildRegistry(extra);
-  return runScan(registry, opts);
+  const result = await runScan(registry, opts);
+
+  // Opt-in: attach a concrete fix (before→after + patch) to every fixable finding.
+  if (opts.withFixes) {
+    const fixes = await computeFixes(result.root, result.findings);
+    for (const f of result.findings) {
+      const fix = fixes.get(f.id);
+      if (fix) f.fix = fix;
+    }
+    result.fixable = result.findings.filter((f) => f.fix).length;
+  }
+  return result;
 }
 
 import { pathToFileURL } from 'node:url';
+import { computeFixes, applyFixes } from './core/fix.js';
+export { computeFixes, applyFixes, fixForFinding } from './core/fix.js';
 
 /** Convenience: scan + render in one call. */
 export async function scanAndRender(opts, format = 'table') {
