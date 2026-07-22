@@ -11,7 +11,7 @@ const GH = 'ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8';
 const dbPassword = 'sup3rSecretDbPass!';
 
 // PLANT: connection-string-creds (high)
-const DB_URL = 'postgres://admin:hunter2@db.internal:5432/prod';
+const DB_URL = 'postgres://appuser:Xk7pQ2wTmZ9@db.internal:5432/prod';
 
 // NOT a finding: generated value (skip rule must suppress)
 const apiKey = 'prefix_' + require('crypto').randomBytes(24).toString('hex');

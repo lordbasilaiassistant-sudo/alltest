@@ -103,9 +103,40 @@ export class Finding {
       confidence: this.confidence,
       tags: this.tags,
       signature: this.signature,
-      meta: this.meta,
+      meta: safeValue(this.meta),
     };
   }
+}
+
+/**
+ * Make an arbitrary probe-supplied value JSON-safe: coerce BigInt to string, break
+ * cycles, drop functions/symbols/undefined. A probe stashing an on-chain 123n amount or
+ * a circular object in `meta` must never be able to crash the entire report.
+ */
+export function safeValue(v, seen = new WeakSet(), depth = 0) {
+  if (v === null || v === undefined) return null;
+  const t = typeof v;
+  if (t === 'bigint') return v.toString();
+  if (t === 'number') return Number.isFinite(v) ? v : String(v);
+  if (t === 'string' || t === 'boolean') return v;
+  if (t === 'function' || t === 'symbol') return undefined;
+  if (depth > 6) return '[max-depth]';
+  if (Array.isArray(v)) {
+    if (seen.has(v)) return '[circular]';
+    seen.add(v);
+    return v.slice(0, 500).map((x) => safeValue(x, seen, depth + 1));
+  }
+  if (t === 'object') {
+    if (seen.has(v)) return '[circular]';
+    seen.add(v);
+    const out = {};
+    for (const k of Object.keys(v)) {
+      const sv = safeValue(v[k], seen, depth + 1);
+      if (sv !== undefined) out[k] = sv;
+    }
+    return out;
+  }
+  return String(v);
 }
 
 /**

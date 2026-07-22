@@ -24,13 +24,12 @@ export async function discoverProjects(dir, opts = {}) {
   async function visit(current, level) {
     let entries;
     try { entries = await fs.readdir(current, { withFileTypes: true }); } catch { return; }
-    const names = new Set(entries.filter((e) => !e.isDirectory() || true).map((e) => e.name));
+    const names = new Set(entries.map((e) => e.name));
     const isProject = PROJECT_MARKERS.some((m) => names.has(m));
-    if (isProject && current !== abs) { found.push(current); return; } // don't descend into a project
-    if (level >= depth) {
-      if (isProject) found.push(current);
-      return;
-    }
+    // A project is a scan unit — include it (even if it IS the root, so `sweep .` inside a
+    // repo works) and do not descend into it looking for sub-projects.
+    if (isProject) { found.push(current); return; }
+    if (level >= depth) return;
     for (const e of entries) {
       if (!e.isDirectory()) continue;
       if (e.name.startsWith('.') || SKIP.has(e.name)) continue;

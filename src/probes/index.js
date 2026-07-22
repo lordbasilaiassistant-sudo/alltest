@@ -5,8 +5,10 @@
 import { ProbeRegistry } from '../core/probe.js';
 
 import secrets from './static/secrets.js';
+import entropySecrets from './static/entropy-secrets.js';
 import dangerousJs from './static/dangerous-js.js';
 import pythonDanger from './static/python-danger.js';
+import complexity from './static/complexity.js';
 import solidity from './static/solidity.js';
 import deps from './static/deps.js';
 import debt from './static/debt.js';
@@ -20,6 +22,7 @@ import selfIntegrity from './meta/self-integrity.js';
 
 export const BUILTIN_PROBES = [
   secrets,
+  entropySecrets,
   dangerousJs,
   pythonDanger,
   solidity,
@@ -28,6 +31,7 @@ export const BUILTIN_PROBES = [
   envLeak,
   configHygiene,
   ciDocker,
+  complexity,
   buildProbe,
   testsProbe,
   fuzzJson,

@@ -55,10 +55,23 @@ export function detectLanguage(path) {
   return BY_EXT[ext] || 'unknown';
 }
 
-/** True for files worth reading as source (skip images/binaries/etc). */
+// Security-relevant files that carry NO recognized source language but MUST be scanned
+// (private keys, credential stores). Without this, the scanner is blind to the single
+// most important thing it claims to catch: committed key material.
+const SECURITY_FILE_RE = /(^|[\\/])(id_rsa|id_dsa|id_ecdsa|id_ed25519|\.wallet-key|\.netrc|_netrc|\.pgpass|\.htpasswd|\.pypirc|credentials|\.npmrc)$/i;
+const SECURITY_EXT_RE = /\.(pem|key|p12|pfx|pkcs12|keystore|jks|der|ppk|crt|cer|asc|gpg|kdbx|ovpn)$/i;
+
+/** True for files worth reading (skip images/binaries; always include key/credential files). */
 export function isTextSource(path) {
   const lang = detectLanguage(path);
-  return lang !== 'unknown' || /\.(txt|cfg|conf|ini|properties|gradle|lock|xml|graphql|proto)$/i.test(path);
+  if (lang !== 'unknown') return true;
+  if (SECURITY_FILE_RE.test(path) || SECURITY_EXT_RE.test(path)) return true;
+  return /\.(txt|cfg|conf|ini|properties|gradle|lock|xml|graphql|proto|env|tfstate|tfvars)$/i.test(path);
+}
+
+/** Is this a private-key / credential-bearing file by name or extension? */
+export function isSecurityFile(path) {
+  return SECURITY_FILE_RE.test(path) || SECURITY_EXT_RE.test(path);
 }
 
 export function summarizeLanguages(files) {

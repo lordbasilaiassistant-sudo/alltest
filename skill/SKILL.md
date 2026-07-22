@@ -77,9 +77,14 @@ Each finding has: `probe`, `ruleId`, `severity` (info→critical), `confidence` 
 - False positive? Add `// alltest-ignore` (or `// alltest-disable-line <ruleId>`) on the
   line, or a path glob in `.alltestignore`. Prefer fixing over ignoring.
 
-## What it catches (13 built-in probes)
-- **Secrets**: private keys (incl. EVM), AWS/GCP/GitHub/Slack/OpenAI/Anthropic/Stripe
-  keys, DB connection strings, credential-named assignments.
+## What it catches (15 built-in probes)
+- **Secrets**: private keys (incl. EVM `Wallet()`), 40+ vendor patterns (AWS/GCP/GitHub/
+  GitLab/Slack/OpenAI/Anthropic/Stripe/npm/Twilio/SendGrid/Google-OAuth/Telegram…), DB
+  connection strings, credential-named assignments.
+- **Entropy / 0-day secrets**: high-entropy tokens of unknown vendor/format that match no
+  known signature (catches leaked credentials no rule anticipated).
+- **Complexity anomalies**: high cyclomatic complexity, long functions, deep nesting — the
+  hot-spots where latent/unknown bugs concentrate.
 - **Dangerous JS/TS**: eval, `new Function`, command injection, SQL injection, XSS via
   innerHTML, disabled TLS, weak randomness, swallowed errors.
 - **Dangerous Python**: eval/exec, pickle/yaml deserialization, `shell=True`,
@@ -96,8 +101,18 @@ Each finding has: `probe`, `ruleId`, `severity` (info→critical), `confidence` 
 - **Dynamic**: build failures, failing/absent test suites (with `--exec`).
 - **Meta**: alltest's own integrity (registry + Finding schema).
 
+## Running untrusted / generated probes safely
+Probes run in-process by default. To scan with an untrusted or RSI-generated probe, or to
+enforce a hard wall-clock that can kill a synchronously-hanging probe, use the sandbox:
+```bash
+node bin/alltest.js scan <path> --sandbox --timeout 60
+node bin/alltest.js scan <path> --sandbox --probe-module ./generated-probe.mjs
+```
+
 ## Notes
-- The tool self-tests in layers (`npm run test:layers`) — the tester is itself tested.
+- The tool self-tests in 10 layers (`npm run test:layers`, 100 tests) — including mutation
+  testing (proves the tests catch real regressions) and a locked regression suite of every
+  adversarial-review finding. The tester is itself tested.
 - Novel findings feed the RSI knowledge base (`knowledge/signatures.jsonl`); recurring
   ones get promoted to candidate detection rules.
 - Runs on free GLM for optional AI-assisted triage → the z.ai Coding Plan (referral):

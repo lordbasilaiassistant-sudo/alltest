@@ -43,10 +43,32 @@ const MAX_FILE_BYTES = 2 * 1024 * 1024; // skip files > 2MB (generated/data)
 export async function walk(root, opts = {}) {
   const absRoot = path.resolve(root);
   const maxFiles = opts.maxFiles ?? 20000;
-  const ignoreDirs = opts.ignoreDirs || DEFAULT_IGNORE_DIRS;
+  // COPY the ignore set — never mutate the shared module default (would cross-contaminate
+  // sweeps, where every repo's .gitignore dirs would leak into later repos).
+  const ignoreDirs = new Set(opts.ignoreDirs || DEFAULT_IGNORE_DIRS);
   const includeNonSource = opts.includeNonSource ?? false;
+
+  // Handle a single-file target: scan just that file.
+  let rootStat;
+  try {
+    rootStat = await fs.stat(absRoot);
+  } catch {
+    const empty = [];
+    empty.truncated = false;
+    empty.error = 'path not found';
+    return empty;
+  }
+  if (rootStat.isFile()) {
+    const rel = path.basename(absRoot);
+    const out = rootStat.size <= MAX_FILE_BYTES
+      ? [{ path: rel, abs: absRoot, size: rootStat.size, language: detectLanguage(rel) }]
+      : [];
+    out.truncated = false;
+    return out;
+  }
+
   const extra = await loadGitignoreDirs(absRoot);
-  for (const d of extra) ignoreDirs.add?.(d);
+  for (const d of extra) ignoreDirs.add(d);
 
   /** @type {FileEntry[]} */
   const out = [];
@@ -65,7 +87,6 @@ export async function walk(root, opts = {}) {
       const abs = path.join(dir, ent.name);
       if (ent.isSymbolicLink()) continue; // avoid loops
       if (ent.isDirectory()) {
-        if (ignoreDirs.has(ent.name) || ent.name.startsWith('.') && ignoreDirs.has(ent.name)) continue;
         if (ignoreDirs.has(ent.name)) continue;
         stack.push(abs);
       } else if (ent.isFile()) {

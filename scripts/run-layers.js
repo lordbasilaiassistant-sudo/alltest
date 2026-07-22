@@ -21,8 +21,13 @@ const LAYERS = [
   { n: 1, name: 'Unit — tests FOR the tester', file: 'test/layer1-unit.test.js' },
   { n: 2, name: 'Meta — the suite tests ITSELF', file: 'test/layer2-meta.test.js' },
   { n: 3, name: 'Meta-meta — proves Layer 2 can go red', file: 'test/layer3-metameta.test.js' },
-  { n: 4, name: 'RSI + ML pipelines', file: 'test/rsi-ml.test.js' },
-  { n: 5, name: 'Ignore + reporter contracts', file: 'test/ignore-report.test.js' },
+  { n: 4, name: 'Mutation — proves the tests have teeth', file: 'test/mutation.test.js' },
+  { n: 5, name: 'Robustness — hostile & degenerate inputs', file: 'test/robustness.test.js' },
+  { n: 6, name: 'Sandbox — hard-kills a sync-hanging probe', file: 'test/sandbox.test.js' },
+  { n: 7, name: 'Regressions — every adversarial-review finding locked', file: 'test/regressions.test.js' },
+  { n: 8, name: 'RSI + ML pipelines', file: 'test/rsi-ml.test.js' },
+  { n: 9, name: 'Probe coverage (entropy/complexity/python/ci/leak)', file: 'test/probes-extra.test.js' },
+  { n: 10, name: 'Ignore + reporter contracts', file: 'test/ignore-report.test.js' },
 ];
 
 let allGreen = true;

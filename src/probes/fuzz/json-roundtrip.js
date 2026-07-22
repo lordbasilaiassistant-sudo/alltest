@@ -16,8 +16,8 @@ export default {
       let raw;
       try { raw = await ctx.read(file.path); } catch { continue; }
       if (!raw.trim()) continue;
-      // tolerate JSONC in config files
-      const isJsonc = /\.(jsonc)$|tsconfig|\.vscode\//.test(file.path);
+      // tolerate JSONC in config files that officially allow comments/trailing commas
+      const isJsonc = /\.(jsonc|json5)$|tsconfig|jsconfig|devcontainer|\.vscode\/|\.babelrc$|\.eslintrc(\.json)?$|\.swcrc$|\.hintrc$/i.test(file.path);
       const cleaned = isJsonc ? stripJsonComments(raw) : raw;
       try {
         const parsed = JSON.parse(cleaned);

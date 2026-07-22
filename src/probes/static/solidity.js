@@ -6,7 +6,7 @@
 const RULES = [
   {
     id: 'tx-origin-auth',
-    re: /require\s*\(\s*tx\.origin\s*==|tx\.origin\s*==\s*(owner|msg\.sender)/,
+    re: /require\s*\(\s*tx\.origin\s*[!=]=|tx\.origin\s*[!=]=\s*(owner|msg\.sender|admin)/,
     severity: 'high', title: 'Authorization via tx.origin', confidence: 0.85,
     tags: ['access-control', 'swc-115'],
     fix: 'tx.origin auth is phishable. Use msg.sender for authorization checks.',
@@ -41,10 +41,33 @@ const RULES = [
   },
   {
     id: 'blockhash-randomness',
-    re: /keccak256\s*\([^)]*(block\.(timestamp|difficulty|prevrandao|number)|blockhash)/,
-    severity: 'high', title: 'On-chain pseudo-randomness from block variables', confidence: 0.75,
+    // keccak over block vars, OR direct use of blockhash/prevrandao/difficulty in arithmetic/modulo.
+    re: /keccak256\s*\([^)]*(block\.(timestamp|difficulty|prevrandao|number)|blockhash)|\b(blockhash\s*\([^)]*\)|block\.(prevrandao|difficulty))\s*[%*/+]|[%*/+]\s*(blockhash\s*\(|block\.(prevrandao|difficulty|timestamp))/,
+    severity: 'high', title: 'On-chain pseudo-randomness from block variables', confidence: 0.7,
     tags: ['randomness', 'swc-120'],
-    fix: 'block.* values are predictable/manipulable. Use a VRF (e.g. Chainlink) or commit-reveal for randomness.',
+    fix: 'block.* / blockhash values are predictable/manipulable. Use a VRF (e.g. Chainlink) or commit-reveal for randomness.',
+  },
+  {
+    id: 'floating-pragma-range',
+    re: /pragma\s+solidity\s+(>=|>|<=|<)/,
+    severity: 'low', title: 'Unbounded/range pragma — pin the compiler', confidence: 0.7,
+    tags: ['swc-103'],
+    fix: 'A range pragma (>=, <) lets the contract compile under many versions. Pin an exact version for reproducible bytecode.',
+  },
+  {
+    id: 'unbounded-loop',
+    re: /for\s*\([^;]*;\s*[^;]*<\s*\w+\.length\s*;[^)]*\)/,
+    severity: 'low', title: 'Loop over a dynamic array (possible gas DoS)', confidence: 0.35,
+    tags: ['dos', 'swc-128'],
+    fix: 'A loop bounded by a growable array length can exceed the block gas limit as it grows. Cap iterations or use pull-based patterns.',
+  },
+  {
+    id: 'missing-zero-address-check',
+    re: /function\s+(setOwner|transferOwnership|setAdmin|changeOwner|setBeneficiary|setRecipient|setTreasury)\s*\(\s*address\s+\w+/,
+    severity: 'low', title: 'Ownership/recipient setter — confirm a zero-address check', confidence: 0.3,
+    tags: ['access-control'],
+    fix: 'Setters that assign a critical address should require(newAddr != address(0)) to avoid bricking the contract.',
+    postFilter: (line, text) => true,
   },
   {
     id: 'unprotected-selfmint-or-transfer',

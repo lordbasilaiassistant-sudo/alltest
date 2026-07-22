@@ -26,14 +26,35 @@ export default {
           tags: ['secret', 'config'],
         });
       }
-      // key material files
-      if (/\.(pem|key|p12|pfx|keystore)$/.test(base) || base === 'id_rsa' || base === '.wallet-key') {
+      // key material files. Extensions that are ALWAYS private → critical outright.
+      const alwaysPrivate = /\.(key|p12|pfx|pkcs12|keystore|jks|ppk|kdbx)$/i.test(base)
+        || /^(id_rsa|id_dsa|id_ecdsa|id_ed25519)$/.test(base) || base === '.wallet-key';
+      // Ambiguous (.pem/.crt/.cer/.der can be a PUBLIC cert) → inspect content.
+      const ambiguous = /\.(pem|crt|cer|der|asc)$/i.test(base);
+      if (alwaysPrivate) {
         ctx.report({
           ruleId: 'key-file-committed', severity: 'critical',
-          title: `Key/credential file committed: ${f.path}`,
-          message: `${f.path} appears to be private key material committed to the repo.`,
-          file: f.path, line: 1, confidence: 0.7,
+          title: `Private key/credential file committed: ${f.path}`,
+          message: `${f.path} is private key material committed to the repo.`,
+          file: f.path, line: 1, confidence: 0.85,
           fixHint: 'Remove and rotate immediately. Key files belong in a secret store, never in git.',
+          tags: ['secret', 'config'],
+        });
+      } else if (ambiguous) {
+        let content = '';
+        try { content = await ctx.read(f.path); } catch {}
+        const isPrivate = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/.test(content);
+        ctx.report({
+          ruleId: isPrivate ? 'key-file-committed' : 'cert-file-committed',
+          severity: isPrivate ? 'critical' : 'info',
+          title: isPrivate ? `Private key file committed: ${f.path}` : `Certificate file committed: ${f.path}`,
+          message: isPrivate
+            ? `${f.path} contains a PRIVATE KEY header and is committed to the repo.`
+            : `${f.path} looks like a public certificate (no private-key header). Usually harmless, but confirm it holds no private material.`,
+          file: f.path, line: 1, confidence: isPrivate ? 0.9 : 0.5,
+          fixHint: isPrivate
+            ? 'Remove and rotate immediately. Private keys belong in a secret store, never in git.'
+            : 'Public certs are generally fine to commit; verify no private key is bundled.',
           tags: ['secret', 'config'],
         });
       }

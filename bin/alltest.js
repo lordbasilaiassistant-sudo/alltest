@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { scan } from '../src/index.js';
 import { render } from '../src/core/report.js';
 import { filterResultView } from '../src/core/runner.js';
+import { scanSandboxed } from '../src/core/sandbox.js';
 import { buildRegistry } from '../src/probes/index.js';
 import { appendCorpus } from '../src/ml/dataset.js';
 import { learnFromResult } from '../src/rsi/learn.js';
@@ -64,6 +65,14 @@ function parseFlags(args) {
 async function cmdScan(args) {
   const { flags, positional } = parseFlags(args);
   const root = path.resolve(positional[0] || '.');
+  // Fail loudly on a bad path — a typo'd path must not silently report "clean".
+  try {
+    await fs.stat(root);
+  } catch {
+    console.error(`alltest: path not found: ${positional[0] || root}`);
+    process.exitCode = 2;
+    return;
+  }
   const format = flags.format || 'table';
   const layers = flags.layers ? String(flags.layers).split(',') : undefined;
   const probes = flags.probes ? String(flags.probes).split(',') : undefined;
@@ -71,11 +80,26 @@ async function cmdScan(args) {
   const quiet = !!flags.quiet;
 
   const spin = quiet || format !== 'table' ? null : makeProgress();
-  const result = await scan({
-    root, layers, probes, allowExec, version: PKG_VERSION,
-    onEvent: spin ? spin.onEvent : undefined,
-  });
-  if (spin) spin.done();
+  let result;
+  if (flags.sandbox || flags.timeout) {
+    // Hard-isolated scan: enforce a real wall-clock even against synchronously-hanging probes.
+    const hardTimeoutMs = flags.timeout ? Number(flags.timeout) * 1000 : 120000;
+    const probeModules = flags['probe-module'] ? [].concat(flags['probe-module']).map((p) => path.resolve(String(p))) : [];
+    const sb = await scanSandboxed({ root, layers, probes, allowExec, version: PKG_VERSION, probeModules }, { hardTimeoutMs });
+    if (spin) spin.done();
+    if (sb.timedOut || !sb.result) {
+      console.error(`alltest: ${sb.error || 'sandboxed scan failed'}`);
+      process.exitCode = 1;
+      return;
+    }
+    result = sb.result;
+  } else {
+    result = await scan({
+      root, layers, probes, allowExec, version: PKG_VERSION,
+      onEvent: spin ? spin.onEvent : undefined,
+    });
+    if (spin) spin.done();
+  }
 
   // Corpus + RSI get the FULL finding set (info included — valuable training signal).
   if (flags.corpus) {

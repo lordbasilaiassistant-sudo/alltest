@@ -1,8 +1,17 @@
 // runner.js — orchestrates a scan: walk → run probes layer by layer → collect findings.
-// Isolated so a crashing probe can never take down the whole run (that isolation is
-// itself a tested property — a bad probe is exactly the kind of 0-day we must survive).
+//
+// Fault model (be precise, not aspirational):
+//  - A probe that THROWS (sync or async) is caught and recorded; the run continues.
+//  - A probe that AWAITS something that never resolves is bounded by `withTimeout`.
+//  - A probe that SYNCHRONOUSLY blocks the event loop (infinite loop, catastrophic
+//    regex) CANNOT be interrupted on this thread — no same-thread Promise race can.
+//    Built-in probes are bounded (line-length caps + audited regexes). To run UNTRUSTED
+//    or RSI-generated probes safely, use the worker sandbox (src/core/sandbox.js), whose
+//    supervisor can worker.terminate() a synchronously-spinning probe. This mirrors how
+//    ESLint/Prettier run plugins in-process by default.
 
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { walk, makeReader } from './walker.js';
 import { exec } from './exec.js';
 import { Finding, compareFindings, dedupeFindings, signatureOf, SEVERITY } from './finding.js';
@@ -30,9 +39,14 @@ export async function runScan(registry, opts) {
   const files = await walk(root, { maxFiles: opts.maxFiles });
   onEvent({ type: 'walk:done', count: files.length, truncated: !!files.truncated });
 
+  // When the target is a single file, file paths are relative to its parent dir — the
+  // reader and ignore layer must resolve against that base, not the file itself.
+  let readBase = root;
+  try { if ((await fs.stat(root)).isFile()) readBase = path.dirname(root); } catch {}
+
   const languages = summarizeLanguages(files);
   const presentLangs = Object.keys(languages);
-  const read = makeReader(root);
+  const read = makeReader(readBase);
 
   let layers = opts.layers && opts.layers.length ? opts.layers : LAYERS.slice();
   // dynamic probes only run when execution is explicitly allowed
@@ -92,7 +106,7 @@ export async function runScan(registry, opts) {
     onEvent({ type: 'probe:done', probe: def.id, ms: dt, findings: localSink.length, error });
   }
 
-  const { kept, suppressed } = await applyIgnores(root, findings);
+  const { kept, suppressed } = await applyIgnores(readBase, findings);
   const deduped = dedupeFindings(kept).sort(compareFindings);
 
   const result = {

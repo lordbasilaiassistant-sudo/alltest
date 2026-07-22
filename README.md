@@ -98,23 +98,37 @@ for (const f of result.findings) {
 }
 ```
 
-## What it catches
+## What it catches — 15 probes across 4 layers
 
 | Layer | Probe | Examples |
 |---|---|---|
-| static | secrets | private keys (incl. EVM), AWS/GitHub/OpenAI/Anthropic/Stripe keys, DB URLs, credential assignments |
-| static | dangerous-js | eval, `new Function`, command & SQL injection, XSS, disabled TLS, weak randomness |
-| static | python-danger | eval/exec, pickle & yaml deserialization, `shell=True`, `verify=False`, assert-auth |
-| static | solidity | tx.origin auth, unchecked/low-level calls, delegatecall, selfdestruct, weak randomness, floating pragma |
-| static | deps | wildcard versions, missing lockfile, non-registry deps, install hooks, invalid manifest |
-| static | config-hygiene | committed `.env`/key files, `.env` not gitignored, missing `.gitignore` |
-| static | env-leak | error/stack leaks in responses, `process.env` dumps, wildcard CORS |
-| static | ci-docker | `:latest` images, `curl \| bash`, ADD-from-URL, root containers, unpinned Actions |
+| static | secrets | private keys (incl. EVM `Wallet()`), 40+ vendor patterns (AWS, GitHub, GitLab, OpenAI, Anthropic, Stripe, Slack, npm, Twilio, SendGrid, Google OAuth, Telegram…), DB/credential URLs, credential assignments |
+| static | **entropy-secrets** | **0-day secrets**: high-entropy tokens of *unknown* vendor/format that match no signature (found real hardcoded `ADMIN_KEY`s in testing) |
+| static | dangerous-js | eval (incl. indirect `(0,eval)`), `Function()`, string-arg `setTimeout`, command & SQL injection, DOM-XSS (`innerHTML +=`), disabled TLS, JWT `none`, weak randomness |
+| static | python-danger | eval/exec, pickle/yaml/torch/joblib deserialization (RCE), `shell=True`, `verify=False`, SSTI, Django secret, assert-auth |
+| static | solidity | tx.origin auth, unchecked/low-level calls, delegatecall, selfdestruct, block-var randomness, range pragma, unbounded loops, zero-address setters |
+| static | deps | wildcard/unbounded versions, missing lockfile, `curl\|bash` in scripts, install hooks, optional/peer deps, invalid manifest |
+| static | config-hygiene | committed `.env`, **private-key files** (`.key`/`.pem`/`id_rsa`, content-aware vs public certs), `.env` not gitignored |
+| static | env-leak | error/stack leaks (Express/Koa/Fastify/render), `process.env` dumps, wildcard CORS |
+| static | ci-docker | `:latest` images, `curl \| bash`, ADD-from-URL, root containers, unpinned Actions, `pull_request_target` |
+| static | complexity | high cyclomatic complexity, long functions, deep nesting, oversized files — where latent bugs hide |
 | fuzz | json-roundtrip | malformed JSON/config that crashes at load |
 | dynamic | build / tests | build failures, failing or absent test suites (`--exec`) |
 | meta | self-integrity | alltest's own registry + Finding-schema invariants |
 
 Run `alltest probes` for the live list.
+
+## Hard isolation for untrusted probes
+
+Probes run in-process by default (fast, like ESLint plugins). To scan with untrusted or
+RSI-generated probes — or to enforce a real wall-clock — use the worker **sandbox**, whose
+supervisor can `terminate()` a probe stuck in a *synchronous* infinite loop (something no
+same-thread timeout can do):
+
+```bash
+alltest scan . --sandbox --timeout 60          # hard 60s ceiling, killable
+alltest scan . --sandbox --probe-module ./my-probe.mjs
+```
 
 ## Suppressing false positives
 ```js
@@ -134,13 +148,20 @@ Layer 0  Bootstrap — the engine loads, the registry builds
 Layer 1  Unit — the tests FOR the tester (probes vs ground-truth fixtures)
 Layer 2  Meta — the suite tests ITSELF (alltest scans alltest)
 Layer 3  Meta-meta — proves Layer 2 can go red on a real regression
-Layer 4  RSI + ML pipelines learn and emit correctly
-Layer 5  Ignore + reporter contracts (SARIF/JSONL/JSON)
+Layer 4  Mutation — deliberately breaks detection to prove the tests have teeth
+Layer 5  Robustness — hostile & degenerate inputs never crash the engine
+Layer 6  Sandbox — proves a synchronously-hanging probe is actually killed
+Layer 7  Regressions — every adversarial-review finding locked forever
+Layer 8  RSI + ML pipelines learn and emit correctly
+Layer 9  Probe coverage + reporter/ignore contracts (SARIF/JSONL/JSON)
 ```
 ```bash
-npm test            # all layers
+npm test            # 100 tests, all layers
 npm run test:layers # narrated, layer by layer
 ```
+
+Every detection rule was adversarially reviewed; each confirmed false-positive and
+false-negative is now a locked regression test (`test/regressions.test.js`).
 
 ## Roadmap
 - More probes (Rust/Go/Java depth, taint-tracking, AST-level analysis).

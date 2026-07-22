@@ -2,7 +2,8 @@
 // Flags risky version ranges, missing lockfiles, and known-bad install scripts without
 // needing network access.
 
-const RISKY_INSTALL_HOOKS = ['preinstall', 'install', 'postinstall'];
+const RISKY_INSTALL_HOOKS = ['preinstall', 'install', 'postinstall', 'prepare', 'prepublishOnly', 'prepack', 'postpublish'];
+const REMOTE_EXEC_RE = /\b(curl|wget)\b[^|&\n]*[|]\s*(sudo\s+)?(sh|bash|zsh|python)\b|\bnode\s+-e\b|\bbash\s+-c\b/i;
 
 export default {
   id: 'static/deps',
@@ -38,7 +39,12 @@ export default {
         f.path === dir + 'yarn.lock' ||
         f.path === dir + 'bun.lockb'
       );
-      const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+      const deps = {
+        ...(pkg.dependencies || {}),
+        ...(pkg.devDependencies || {}),
+        ...(pkg.optionalDependencies || {}),
+        ...(pkg.peerDependencies || {}),
+      };
       const depCount = Object.keys(deps).length;
 
       if (!hasLock && depCount > 0 && !pkg.workspaces) {
@@ -54,7 +60,9 @@ export default {
 
       for (const [name, range] of Object.entries(deps)) {
         if (typeof range !== 'string') continue;
-        if (range === '*' || range === 'latest' || range === '') {
+        const unbounded = range === '*' || range === '' || /^(latest|next|canary|beta|alpha|nightly|dev|rc)$/i.test(range)
+          || /^(>=?|>)\s*[\d.]/.test(range) || /^\d+\.x$/.test(range) || range === 'x';
+        if (unbounded) {
           ctx.report({
             ruleId: 'wildcard-dependency', severity: 'medium',
             title: `Unpinned dependency: ${name}@${range || '(empty)'}`,
@@ -86,6 +94,19 @@ export default {
             file: file.path, line: lineOf(raw, `"${hook}"`), language: 'json', confidence: 0.5,
             fixHint: 'Install hooks run arbitrary code on npm install. Verify it is necessary and safe.',
             tags: ['supply-chain'],
+          });
+        }
+      }
+      // curl|bash / node -e in ANY script (not just install hooks) — a supply-chain foothold.
+      for (const [name, cmd] of Object.entries(scripts)) {
+        if (typeof cmd === 'string' && REMOTE_EXEC_RE.test(cmd)) {
+          ctx.report({
+            ruleId: 'script-remote-exec', severity: 'high',
+            title: `npm script "${name}" pipes remote content into a shell`,
+            message: `${file.path} script "${name}" runs: ${cmd.slice(0, 140)} — this executes unverified remote code.`,
+            file: file.path, line: lineOf(raw, `"${name}"`), language: 'json', confidence: 0.8,
+            fixHint: 'Download and verify a checksum/signature before executing; never pipe curl|bash.',
+            tags: ['supply-chain', 'cwe-494'],
           });
         }
       }

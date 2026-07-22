@@ -34,6 +34,10 @@ export function exec(cmd, args = [], opts = {}) {
     let stderr = '';
     let killed = false;
     let over = false;
+    // Decode as UTF-8 at the stream boundary so multibyte chars aren't split across
+    // chunks (raw Buffer concatenation produces mojibake).
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
 
     const timer = setTimeout(() => {
       killed = true;
