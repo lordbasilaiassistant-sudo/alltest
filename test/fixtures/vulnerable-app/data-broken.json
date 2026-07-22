@@ -1,0 +1,6 @@
+{
+  "name": "broken",
+  "items": [1, 2, 3,],
+  "missing": ,
+  "trailing": "comma"
+}

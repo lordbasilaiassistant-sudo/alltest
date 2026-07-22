@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+# scan artifacts (regenerated locally; may contain paths/snippets from scanned repos —
+# never commit these to a public repo). Only the synthetic sample-corpus is tracked.
+dataset/findings.jsonl
+dataset/findings.manifest.json
+dataset/sweep-report.json
+*.sarif
+.alltest-cache/

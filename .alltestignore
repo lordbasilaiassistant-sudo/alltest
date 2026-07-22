@@ -1,0 +1,14 @@
+# alltest scanning its own repo: the probe rule-definition files contain the very
+# patterns they detect (as data), so they self-trip. Their logic is verified by the
+# layered tests in test/ instead. This is the standard practice for security scanners
+# (gitleaks/semgrep exclude their own signature files).
+src/probes/static/secrets.js
+src/probes/static/dangerous-js.js
+src/probes/static/python-danger.js
+src/probes/static/ci-docker.js
+src/probes/static/solidity.js
+src/probes/static/env-leak.js
+src/probes/static/debt.js
+src/rsi/learn.js
+dataset/
+test/

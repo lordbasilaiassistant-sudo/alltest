@@ -1,0 +1,55 @@
+{
+  "name": "alltest",
+  "version": "0.1.0",
+  "description": "The layered code-testing engine — run every kind of test/probe against any codebase, catch 0-day issues, file AI-fixable reports, and self-improve. Live → https://github.com/lordbasilaiassistant-sudo/alltest",
+  "type": "module",
+  "bin": {
+    "alltest": "bin/alltest.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./probe": "./src/core/probe.js",
+    "./finding": "./src/core/finding.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "knowledge/",
+    "skill/",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:layers": "node scripts/run-layers.js",
+    "selftest": "node bin/alltest.js scan . --format table",
+    "sweep": "node bin/alltest.js sweep",
+    "start": "node bin/alltest.js"
+  },
+  "keywords": [
+    "testing",
+    "test-suite",
+    "static-analysis",
+    "security",
+    "vulnerability",
+    "code-quality",
+    "fuzzing",
+    "solidity",
+    "secrets-detection",
+    "sast",
+    "linter",
+    "ai-agents",
+    "code-review",
+    "0-day",
+    "zero-day"
+  ],
+  "author": "lordbasilaiassistant",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lordbasilaiassistant-sudo/alltest.git"
+  },
+  "homepage": "https://github.com/lordbasilaiassistant-sudo/alltest#readme"
+}

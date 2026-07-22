@@ -1,0 +1,9 @@
+{
+  "name": "clean-fixture",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A clean project that must produce zero alltest findings.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
