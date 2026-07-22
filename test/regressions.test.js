@@ -15,6 +15,12 @@ async function scanCode(name, content, probes) {
   const r = await scan({ root: dir, probes });
   return new Set(r.findings.map((f) => f.ruleId));
 }
+// Assemble vendor tokens from fragments so the CONTIGUOUS secret pattern never appears in
+// committed source. alltest reconstructs the full token in memory and detects it at
+// runtime, but GitHub secret scanning (and any fork's scanner) sees only harmless pieces —
+// so a scanner's own test suite never raises false "exposed secret" alerts. (See #1.)
+const j = (...parts) => parts.join('');
+
 const mustNot = async (name, code, ruleId, probes) => {
   const rules = await scanCode(name, code, probes);
   assert.ok(!rules.has(ruleId), `FALSE POSITIVE regressed: "${code.trim()}" should NOT trigger ${ruleId}`);
@@ -48,8 +54,8 @@ test('FN: Function("...") without new is caught', () => must('a.js', 'const fn =
 test('FN: string-arg setTimeout is eval-equivalent', () => must('a.js', 'setTimeout("doWork()", delay);\n', 'string-arg-timer'));
 test('FN: hardcoded key in new Wallet() is critical', () => must('a.js', 'const w = new ethers.Wallet("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");\n', 'eth-wallet-literal'));
 test('FN: credentials in ftp:// URL are caught', () => must('a.js', 'const u = "ftp://admin:S3cr3tPazz9@host.internal.net/data";\n', 'connection-string-creds'));
-test('FN: Slack app token (xapp-) is caught', () => must('a.js', 'const t = "xapp-1-A012BCDEF34-9087654321-abcdefADCBEF9087qrstuv";\n', 'slack-token'));
-test('FN: Stripe webhook secret (whsec_) is caught', () => must('a.js', 'const w = "whsec_9aB7cD5eF3gH1iJ0kLmN2oPqRsTuVwXyz";\n', 'stripe-webhook'));
+test('FN: Slack app token (xapp-) is caught', () => must('a.js', `const t = "${j('xapp', '-1-A012BCDEF34-9087654321-abcdefADCBEF9087qrstuv')}";\n`, 'slack-token'));
+test('FN: Stripe webhook secret (whsec_) is caught', () => must('a.js', `const w = "${j('whsec', '_9aB7cD5eF3gH1iJ0kLmN2oPqRsTuVwXyz')}";\n`, 'stripe-webhook'));
 test('FN: torch.load untrusted deserialization is caught', () => must('a.py', 'model = torch.load(untrusted_path)\n', 'py-unsafe-deserialize'));
 test('FN: pickle.Unpickler is caught', () => must('a.py', 'obj = pickle.Unpickler(f).load()\n', 'py-unsafe-deserialize'));
 test('FN: tx.origin != owner is still tx-origin auth', () => must('V.sol', 'contract V { function f() public { require(tx.origin != owner); } }\n', 'tx-origin-auth'));
