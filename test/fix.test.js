@@ -107,6 +107,19 @@ test('applyFixes writes safe fixes and they clear on re-scan', async () => {
   assert.ok(a.includes('const keep = 1;'), 'unrelated code preserved');
 });
 
+test('every finding carries a concrete fix (universal coverage via fallback)', async () => {
+  const dir = path.join(path.dirname(fileURLToPathReg()), 'fixtures', 'vulnerable-app');
+  const r = await scan({ root: dir, withFixes: true });
+  const missing = r.findings.filter((f) => !f.fix);
+  assert.equal(missing.length, 0, `these findings lack a fix: ${missing.map((f) => f.ruleId).join(', ')}`);
+  // manual/fallback fixes still carry actionable guidance, not empty strings
+  for (const f of r.findings) assert.ok(f.fix.note && f.fix.note.length > 8, `note for ${f.ruleId}`);
+});
+
+function fileURLToPathReg() {
+  return new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+}
+
 test('applyFixes dry-run does not modify files', async () => {
   const dir = await repo({ 'a.js': 'debugger;\nconst x=1;\n' });
   const before = await fs.readFile(path.join(dir, 'a.js'), 'utf8');

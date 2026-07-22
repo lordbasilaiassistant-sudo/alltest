@@ -106,6 +106,60 @@ const FIXERS = {
     return { strategy: 'replace-line', replacement: r, note: `Pin the compiler to exactly ${m[1]} (drop the ^) for reproducible bytecode.`, autoApplicable: true, confidence: 0.7 };
   },
 
+  'string-arg-timer': (f, lines) => {
+    const src = lines[f.line - 1] ?? '';
+    // setTimeout("doWork()", t) → setTimeout(() => { doWork() }, t)
+    const r = src.replace(/\b(setTimeout|setInterval)\s*\(\s*(["'`])((?:[^"'`\\]|\\.)*)\2/, '$1(() => { $3 }');
+    if (r === src) return null;
+    return { strategy: 'replace-line', replacement: r, note: 'Pass a function instead of a string (the string form is eval-ed).', autoApplicable: false, confidence: 0.55 };
+  },
+  'py-flask-debug': (f, lines) => {
+    const src = lines[f.line - 1] ?? '';
+    const r = src.replace(/\bdebug\s*=\s*True\b/, 'debug=False').replace(/\bDEBUG\s*=\s*True\b/, 'DEBUG = False');
+    if (r === src) return null;
+    return { strategy: 'replace-line', replacement: r, note: 'Disable debug mode in production (it exposes an interactive debugger and stack traces).', autoApplicable: true, confidence: 0.7 };
+  },
+  'py-bare-except': (f, lines) => {
+    const src = lines[f.line - 1] ?? '';
+    const r = src.replace(/\bexcept\s*:/, 'except Exception:');
+    if (r === src) return null;
+    return { strategy: 'replace-line', replacement: r, note: 'Catch Exception (not a bare except, which also swallows KeyboardInterrupt/SystemExit).', autoApplicable: true, confidence: 0.75 };
+  },
+  'py-subprocess-shell': (f, lines) => {
+    const src = lines[f.line - 1] ?? '';
+    const r = src.replace(/,\s*shell\s*=\s*True/, '');
+    return { strategy: 'replace-line', replacement: r !== src ? r : null,
+      note: 'Remove shell=True and pass the command as an argument LIST (e.g. ["ls", path]) so input can\'t be interpreted by a shell.', autoApplicable: false, confidence: 0.55 };
+  },
+  'py-mktemp': (f, lines) => ({ strategy: 'replace-line', replacement: (lines[f.line - 1] || '').replace(/tempfile\.mktemp/, 'tempfile.mkstemp'),
+    note: 'Use tempfile.mkstemp() (returns (fd, path)) or NamedTemporaryFile — mktemp is race-prone. Adjust for the (fd, path) return.', autoApplicable: false, confidence: 0.5 }),
+  'floating-pragma-range': (f, lines) => {
+    const src = lines[f.line - 1] ?? '';
+    const m = /(\d+\.\d+\.\d+)/.exec(src);
+    if (!m) return null;
+    return { strategy: 'replace-line', replacement: src.replace(/pragma\s+solidity\s+[^;]+;/, `pragma solidity ${m[1]};`),
+      note: `Pin the compiler to exactly ${m[1]} for reproducible bytecode.`, autoApplicable: false, confidence: 0.6 };
+  },
+  'unsafe-erc20-transfer': (f, lines) => {
+    const src = lines[f.line - 1] ?? '';
+    const r = src.replace(/\.transferFrom\s*\(/, '.safeTransferFrom(').replace(/\.transfer\s*\(/, '.safeTransfer(').replace(/\.approve\s*\(/, '.forceApprove(');
+    return { strategy: 'replace-line', replacement: r !== src ? r : null,
+      note: 'Use OpenZeppelin SafeERC20 (safeTransfer/safeTransferFrom/forceApprove) and `using SafeERC20 for IERC20;` — some tokens don\'t return a bool.', autoApplicable: false, confidence: 0.5 };
+  },
+  'error-message-to-response': (f, lines) => ({ strategy: 'replace-line',
+    replacement: (lines[f.line - 1] || '').replace(/\b(?:e|ex|err|error|exception|\w*[eE]rr(?:or)?)\.(?:message|stack)\b/i, "'Internal error'"),
+    note: 'Return a generic message to the client and log the real error server-side (e.g. logger.error(err)).', autoApplicable: false, confidence: 0.5 }),
+  'jwt-none-alg': (f, lines) => ({ strategy: 'replace-line', replacement: (lines[f.line - 1] || '').replace(/["'`]none["'`]/i, "'RS256'"),
+    note: 'Never accept alg:none. Pin a real algorithm (RS256/HS256) so tokens can\'t be forged.', autoApplicable: false, confidence: 0.55 }),
+  'cors-wildcard': (f, lines) => ({ strategy: 'manual', replacement: null,
+    note: 'Replace the "*" origin with an explicit allowlist of trusted origins (especially if credentials are enabled).', autoApplicable: false, confidence: 0.5 }),
+  'docker-latest-tag': (f, lines) => ({ strategy: 'manual', replacement: null,
+    note: 'Pin the base image to a specific version or digest, e.g. `FROM node:20.11.1-slim` or `FROM node@sha256:…`.', autoApplicable: false, confidence: 0.5 }),
+  'missing-lockfile': (f) => ({ strategy: 'manual', replacement: null,
+    note: 'Run `npm install` (or pnpm/yarn) to generate a lockfile, then commit it for reproducible, auditable installs.', autoApplicable: false, confidence: 0.6 }),
+  'no-tests': (f) => ({ strategy: 'manual', replacement: null,
+    note: 'Add a test suite. Minimal start with the built-in runner:\n```js\nimport { test } from "node:test";\nimport assert from "node:assert";\ntest("smoke", () => { assert.ok(true); });\n```\nthen add a "test": "node --test" script.', autoApplicable: false, confidence: 0.5 }),
+
   'catch-swallow': (f, lines) => {
     const src = lines[f.line - 1] ?? '';
     const indent = (src.match(/^\s*/) || [''])[0];
@@ -178,10 +232,15 @@ function unifiedDiff(file, lineNo, before, after) {
  */
 export function fixForFinding(finding, lines) {
   const gen = FIXERS[finding.ruleId] || (SECRET_RULES.has(finding.ruleId) ? FIXERS.__secret : null);
-  if (!gen) return null;
   let r;
-  try { r = gen(finding, lines); } catch { return null; }
-  if (!r) return null;
+  if (gen) { try { r = gen(finding, lines); } catch { r = null; } }
+  // Universal fallback: every finding carries a structured fix. When there's no mechanical
+  // transformation, surface the rule's concrete remediation as a manual step — actionable
+  // guidance for THIS finding, not a generic hint lost in prose.
+  if (!r) {
+    if (!finding.fixHint) return null;
+    r = { strategy: 'manual', replacement: null, note: finding.fixHint, autoApplicable: false, confidence: 0.4 };
+  }
   const original = r.original !== undefined ? r.original : (lines[finding.line - 1] ?? null);
   let patch = '';
   if (r.strategy === 'replace-line') patch = unifiedDiff(finding.file, finding.line, original, r.replacement);
