@@ -14,3 +14,4 @@ dataset/findings.manifest.json
 dataset/sweep-report.json
 *.sarif
 .alltest-cache/
+test/fixtures/benign-external-probe.mjs
