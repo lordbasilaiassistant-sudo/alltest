@@ -71,7 +71,18 @@ your own** — it's the vetted change. Auto-applicable fixes are behavior-safe; 
 (secrets → `process.env`, SQL → parameterized) are suggestions you should review in context.
 Always re-run `scan` after fixing to confirm the `ruleId` no longer fires.
 
-### 5. List available probes
+### 5. Add custom detection rules (no code)
+Create `.alltest/rules.json` in the target repo to add org-specific detections:
+```json
+[{ "id": "no-internal-token", "pattern": "INT-[A-Z0-9]{24}", "severity": "high",
+   "title": "Internal token committed", "fixHint": "Load from env; rotate.", "languages": ["*"] }]
+```
+And propose rules from what alltest has learned (review before enabling):
+```bash
+node bin/alltest.js propose-rules --out .alltest/rules.json
+```
+
+### 6. List available probes
 ```bash
 node bin/alltest.js probes
 ```

@@ -39,6 +39,7 @@ async function main() {
     case 'report': return cmdReport(rest);
     case 'fix': return cmdFix(rest);
     case 'learn': return cmdLearn(rest);
+    case 'propose-rules': return cmdProposeRules(rest);
     case 'probes': return cmdProbes(rest);
     case 'version': case '--version': case '-v':
       console.log(`alltest ${PKG_VERSION}`); return;
@@ -239,6 +240,26 @@ async function cmdLearn(args) {
   console.error(`RSI: ${learned.novel} novel signatures learned; knowledge base now ${learned.total}.`);
 }
 
+async function cmdProposeRules(args) {
+  const { flags } = parseFlags(args);
+  const { synthesizeRuleProposals, promoteCandidates } = await import('../src/rsi/learn.js');
+  await promoteCandidates(flags['min-count'] ? Number(flags['min-count']) : 3);
+  const proposals = await synthesizeRuleProposals({ minCount: flags['min-count'] ? Number(flags['min-count']) : 3 });
+  if (!proposals.length) {
+    console.error('No rule proposals yet. Scan more code with --learn so the RSI knowledge base accumulates repeated patterns.');
+    return;
+  }
+  if (flags.out) {
+    // strip provenance for a ready-to-use .alltest/rules.json
+    const clean = proposals.map(({ _provenance, ...r }) => r);
+    await fs.writeFile(path.resolve(String(flags.out)), JSON.stringify(clean, null, 2));
+    console.error(`Wrote ${clean.length} proposed rules to ${flags.out}. REVIEW each before enabling — a learned regex will flag other code.`);
+  } else {
+    console.error(`${proposals.length} rule proposal(s) from the RSI knowledge base (review before adding to .alltest/rules.json):\n`);
+    console.log(JSON.stringify(proposals, null, 2));
+  }
+}
+
 async function cmdProbes() {
   const reg = buildRegistry();
   const list = reg.select();
@@ -283,8 +304,11 @@ USAGE
   alltest sweep <dir>                 Scan every repo/subproject under <dir>
   alltest report [path] --github O/R  Scan and file AI-fixable GitHub issues (with fixes)
   alltest learn <report.json>         Feed findings into the RSI knowledge base
+  alltest propose-rules [--out f]     Draft custom rules from learned patterns (review first)
   alltest probes                      List all probes
   alltest version
+
+  Custom rules: drop a .alltest/rules.json in any repo to add detections (no code).
 
 FIX OPTIONS
   --apply               Write the auto-applicable fixes to disk (default: dry run)

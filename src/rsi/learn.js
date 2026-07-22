@@ -86,6 +86,62 @@ export async function promoteCandidates(threshold = 3, opts = {}) {
   return promoted;
 }
 
+/**
+ * Turn promoted candidate signatures into reviewable custom-rule DRAFTS. This is the
+ * closed end of the RSI loop: a pattern seen often enough becomes a proposed detection
+ * rule that a human/agent reviews and drops into `.alltest/rules.json`. We propose rather
+ * than auto-load — a learned regex must be vetted before it can flag other people's code.
+ * @returns {Promise<Array<object>>} proposed rules (custom-rules schema) with provenance
+ */
+export async function synthesizeRuleProposals(opts = {}) {
+  const kbPath = opts.kbPath || KB_PATH;
+  const minCount = opts.minCount ?? 3;
+  const kb = await loadKB(kbPath);
+  const proposals = [];
+  for (const e of kb.values()) {
+    if (e.status !== 'candidate-rule' && !(e.status === 'observed' && e.count >= minCount)) continue;
+    const pattern = templateToRegex(e.template);
+    if (!pattern) continue;
+    proposals.push({
+      id: `learned-${e.ruleId}-${shortHash(e.signature)}`,
+      pattern,
+      flags: '',
+      severity: e.severity || 'low',
+      title: `[learned] ${e.title || e.ruleId}`,
+      message: `Auto-proposed from ${e.count} observation(s) of "${e.ruleId}". Review before enabling.`,
+      languages: e.language && e.language !== 'any' ? [e.language] : ['*'],
+      fixHint: e.fixHint || 'Review this learned pattern and confirm it is a real issue.',
+      tags: Array.isArray(e.tags) ? e.tags : [],
+      confidence: 0.5,
+      _provenance: { signature: e.signature, count: e.count, seenIn: e.examples },
+    });
+  }
+  return proposals;
+}
+
+/** Best-effort: turn a normalized template back into a conservative literal-anchored regex. */
+function templateToRegex(template) {
+  if (!template || typeof template !== 'string') return null;
+  // keep literal keywords/operators; turn placeholders into bounded wildcards
+  const src = template
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')       // escape regex specials
+    .replace(/<STR>/g, '["\'`][^"\'`]*["\'`]')      // string placeholder
+    .replace(/<HEX>/g, '0x[0-9a-fA-F]+')            // hex placeholder
+    .replace(/<NUM>/g, '\\d+')                       // number placeholder
+    .replace(/\s+/g, '\\s+')
+    .trim();
+  // require at least one literal anchor so the rule isn't a match-everything regex
+  if (!/[A-Za-z]{3,}/.test(template.replace(/<STR>|<HEX>|<NUM>/g, ''))) return null;
+  if (src.length < 6 || src.length > 300) return null;
+  return src;
+}
+
+function shortHash(s) {
+  let h = 0;
+  for (let i = 0; i < String(s).length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36).slice(0, 6);
+}
+
 export async function kbStats(opts = {}) {
   const kb = await loadKB(opts.kbPath || KB_PATH);
   const byStatus = {}, byLang = {};

@@ -15,6 +15,7 @@ import debt from './static/debt.js';
 import envLeak from './static/env-leak.js';
 import configHygiene from './static/config-hygiene.js';
 import ciDocker from './static/ci-docker.js';
+import customRules from './static/custom-rules.js';
 import buildProbe from './dynamic/build.js';
 import testsProbe from './dynamic/tests.js';
 import fuzzJson from './fuzz/json-roundtrip.js';
@@ -32,6 +33,7 @@ export const BUILTIN_PROBES = [
   configHygiene,
   ciDocker,
   complexity,
+  customRules,
   buildProbe,
   testsProbe,
   fuzzJson,

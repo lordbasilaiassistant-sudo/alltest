@@ -1,6 +1,6 @@
 {
   "name": "@anthonysnider/alltest",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "The layered code-testing engine — run every kind of test/probe against any codebase, catch 0-day issues, file AI-fixable reports, and self-improve. Live → https://github.com/lordbasilaiassistant-sudo/alltest",
   "type": "module",
   "bin": {

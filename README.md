@@ -151,6 +151,26 @@ alltest scan . --sandbox --timeout 60          # hard 60s ceiling, killable
 alltest scan . --sandbox --probe-module ./my-probe.mjs
 ```
 
+## Extend detection with your own rules — no code
+
+Drop a `.alltest/rules.json` in any repo to add detections (org-specific token formats,
+forbidden functions, deprecated APIs):
+```json
+[{
+  "id": "no-internal-token",
+  "pattern": "INT-[A-Z0-9]{24}",
+  "severity": "high",
+  "title": "Internal service token committed",
+  "fixHint": "Load INT_TOKEN from the environment and rotate this one.",
+  "languages": ["*"]
+}]
+```
+
+alltest also **proposes new rules from what it has learned**. As the RSI knowledge base
+accumulates repeated patterns, `alltest propose-rules --out .alltest/rules.json` drafts
+detection rules for you to review and enable — the closed end of the self-improvement loop
+(it proposes; a human/agent vets before a learned regex can flag other code).
+
 ## Suppressing false positives
 ```js
 const y = eval(trusted);   // alltest-ignore
